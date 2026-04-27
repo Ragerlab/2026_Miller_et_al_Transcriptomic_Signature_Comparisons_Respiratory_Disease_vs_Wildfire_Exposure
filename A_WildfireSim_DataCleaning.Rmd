@@ -1,0 +1,581 @@
+---
+title: "A_WildfireSim_DataCleaning"
+author: "Sarah Miller"
+date: "2025-05-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+library(xml2)
+library(orthogene)
+library(tidyverse)
+library(dplyr)
+library(janitor)
+```
+
+# CTD HUMAN DISEASE DATA CLEANING
+
+## GENERATE CTD GENE LISTS:  Read-in NCBI human gene list and CTD disease-specific (more than just human) gene lists. Rename CTD columns and filter Gene_ID to only those found in the NCBI human gene list in order to remove non-human genes.
+THESE CTD GENE LISTS WILL HAVE DUPLICATES!!! Mostly due to heterogeneous Disease_name column.
+```{r}
+# Read-in NCBI human gene list
+NCBI <- read_tsv("ncbi_human.tsv")
+colnames(NCBI) <- c("NCBI_GeneID","Symbol","Description","Taxonomy_name","Gene_type","Transcripts","Gene_GroupID","Gene_GroupMethod")
+
+
+# Read-in all CTD gene lists
+# Create list of file names (will use as file path for function below)
+input <- list.files(path="1_CTD_DiseaseListsV4",
+                      pattern=".csv")
+
+# Make list of file names and clean so you can use to rename list below
+input_names <- gsub("IS.csv","", input)
+
+# Read-in files
+setwd("1_CTD_DiseaseListsV4")
+CTD_input_master <- lapply(input, function(x) {
+  read_csv(file = x)
+})
+
+# Rename list elements with condition
+names(CTD_input_master) <- input_names
+
+
+# Clean CTD gene lists
+# Write function
+clean_CTD <- function(data){
+  colnames(data) <- c("Gene_symbol","Gene_ID","Disease_name","Disease_ID","Direct_evidence","Inference_network","Inference_score","Reference_count")
+  data <- data %>%
+    filter(Gene_ID %in% NCBI$NCBI_GeneID) %>%
+    mutate(Database = "CTD")
+  return(data)
+}
+
+# Apply functions
+CTD_input_master_cleaned <- lapply(CTD_input_master, clean_CTD)
+```
+
+# Filter to CTD disease-specific lists
+```{r}
+# ASTHMA
+asthma <- data.frame(CTD_input_master_cleaned[["CTD_asthma"]]) %>%
+  mutate(Origin_file = "CTD_asthmaIS.csv",
+         Disease = "Asthma")
+# COPD
+copd <- data.frame(CTD_input_master_cleaned[["CTD_copd"]]) %>%
+# Filter for COPD, Chronic bronchitis, and Pulmonary emphysema
+  filter(Disease_ID == "MESH:D029424" | Disease_ID == "MESH:D029481" | Disease_ID == "MESH:D011656") %>%
+  mutate(Origin_file = "CTD_copdIS.csv",
+         Disease = "COPD")
+
+# INTERSTITIAL LUNG DISEASE (ILD)
+ild <- data.frame(CTD_input_master_cleaned[["CTD_ild"]]) %>%
+  mutate(Origin_file = "CTD_ildIS.csv",
+         Disease = "ILD")
+
+# Using CTD_respinfIS.csv as master, filter for individual infections of interest
+# PNEUMONIA
+pneumonia <- data.frame(CTD_input_master_cleaned[["CTD_respinf"]]) %>%
+  filter(Disease_ID == "MESH:D011014") %>%
+  mutate(Origin_file = "CTD_RespInfIS.csv",
+         Disease = "Pneumonia")
+# INFLUENZA
+influenza <- data.frame(CTD_input_master_cleaned[["CTD_respinf"]]) %>%
+  filter(Disease_ID == "MESH:D007251") %>%
+  mutate(Origin_file = "CTD_RespInfIS.csv",
+         Disease = "Influenza")
+# COVID
+covid <- data.frame(CTD_input_master_cleaned[["CTD_respinf"]]) %>%
+  filter(Disease_ID == "MESH:D000086382") %>%
+  mutate(Origin_file = "CTD_RespInfIS.csv",
+         Disease = "COVID-19")
+#BRONCHITIS
+bronchitis <- data.frame(CTD_input_master_cleaned[["CTD_respinf"]]) %>%
+  filter(Disease_ID == "MESH:D001991") %>%
+  mutate(Origin_file = "CTD_RespInfIS.csv",
+         Disease = "Bronchitis")
+
+# RESPIRATORY HYPERSENSITIVITY
+hypersensitivity <- data.frame(CTD_input_master_cleaned[["CTD_resphyp"]]) %>%
+# Filter for NOT Asthma
+  filter(Disease_ID != "MESH:D001249") %>%
+  mutate(Origin_file = "CTD_resphypIS.csv",
+         Disease = "Respiratory hypersensitivity")
+```
+
+# Create list of cleaned CTD lists
+```{r}
+CTD_master <- list(asthma, copd, ild, pneumonia, influenza, covid, bronchitis, hypersensitivity)
+disease_names <- c("Asthma","COPD","ILD","Pneumonia","Influenza","COVID-19","Bronchitis","Hypersensitivity")
+names(CTD_master) <- disease_names
+```
+
+
+# MSigDB HUMAN DISEASE DATA CLEANING
+
+## Extract gene names from MSigDB .xml files. Convert MSigDB .xml files to .csv so you can merge with CTD .csv files
+You should only have to do this once, immediately after downloading MSigDB origin files from database. Re-run for each file
+```{r}
+#Extract gene list from GSEA .xml file
+human <- read_xml("3_Top300DiseaseLists/1_MSigDBDiseaseLists/HP_BRONCHITIS.xml")
+test <- xml_attrs(xml_child(human, 1))[["MEMBERS_SYMBOLIZED"]]
+test <- strsplit(test,",")
+human1 <- data.frame(test[[1]]) %>%
+  rename('human_gene_name' = 'test..1..')
+#write_csv(human1, "3_Top300DiseaseLists/1_MSigDBDiseaseLists/HP_BRONCHITIS.csv")
+```
+
+## Read-in MSigDB csv files and clean
+```{r}
+# Read-in all MSigDB gene lists
+# Create list of file names (will use as file path for function below)
+input <- list.files(path="1_MSigDB_DiseaseLists",
+                      pattern=".csv")
+
+# Make list of file names and clean so you can use to rename list below
+input_names <- gsub(".csv","", input)
+
+# Read-in files
+setwd("1_MSigDB_DiseaseLists")
+MSigDB_input_master <- lapply(input, function(x) {
+  read_csv(file = x)
+})
+
+# Rename list elements with condition
+names(MSigDB_input_master) <- input_names
+
+
+# Clean MSigDB gene lists
+# Write function
+clean_MSigDB <- function(data){
+  data <- data %>%
+    mutate(Database = "MSigDB",
+           Inference_score = 1000) %>%
+    rename("Gene_symbol" = "human_gene_name")
+  return(data)
+}
+
+# Apply functions
+MSigDB_input_master_cleaned <- lapply(MSigDB_input_master, clean_MSigDB)
+```
+
+## Generate disease-specific MSigDB lists
+```{r}
+# ASTHMA
+asthma <- data.frame(MSigDB_input_master_cleaned[["HP_ASTHMA"]]) %>%
+  mutate(Origin_file = "HP_ASTHMA.csv")
+asthma <- bind_rows(asthma, data.frame(MSigDB_input_master_cleaned[["KEGG_ASTHMA"]] %>%
+                                         mutate(Origin_file = "KEGG_ASTHMA.csv")))
+asthma <- asthma %>% mutate(Disease = "Asthma")
+
+# COPD
+copd <- data.frame(MSigDB_input_master_cleaned[["HP_CHRONIC_PULMONARY_OBSTRUCTION"]]) %>%
+  mutate(Origin_file = "HP_CHRONIC_PULMONARY_OBSTRUCTION.csv")
+copd <- bind_rows(copd, data.frame(MSigDB_input_master_cleaned[["HP_CHRONIC_BRONCHITIS"]] %>%
+                                         mutate(Origin_file = "HP_CHRONIC_BRONCHITIS.csv")))
+copd <- bind_rows(copd, data.frame(MSigDB_input_master_cleaned[["HP_EMPHYSEMA"]] %>%
+                                         mutate(Origin_file = "HP_EMPHYSEMA.csv")))
+copd <- copd %>% mutate(Disease = "COPD")
+
+# ILD
+ild <- data.frame(MSigDB_input_master_cleaned[["HP_PULMONARY_FIBROSIS"]]) %>%
+  mutate(Origin_file = "HP_PULMONARY_FIBROSIS.csv")
+ild <- bind_rows(ild, data.frame(MSigDB_input_master_cleaned[["HP_ABNORMAL_PULMONARY_INTERSTITIAL_MORPHOLOGY"]] %>%
+                                         mutate(Origin_file = "HP_ABNORMAL_PULMONARY_INTERSTITIAL_MORPHOLOGY.csv")))
+ild <- ild %>% mutate(Disease = "ILD")
+
+# PNEUMONIA
+pneumonia <- data.frame(MSigDB_input_master_cleaned[["HP_PNEUMONIA"]]) %>%
+  mutate(Origin_file = "HP_PNEUMONIA.csv")
+pneumonia <- bind_rows(pneumonia, data.frame(MSigDB_input_master_cleaned[["HP_ACUTE_INFECTIOUS_PNEUMONIA"]] %>%
+                                         mutate(Origin_file = "HP_ACUTE_INFECTIOUS_PNEUMONIA.csv")))
+pneumonia <- pneumonia %>% mutate(Disease = "Pneumonia")
+
+# INFLUENZA
+influenza <- data.frame(MSigDB_input_master_cleaned[["REACTOME_INFLUENZA_INFECTION"]]) %>%
+  mutate(Origin_file = "REACTOME_INFLUENZA_INFECTION.csv",
+         Disease = "Influenza")
+
+# COVID
+covid <- data.frame(MSigDB_input_master_cleaned[["WP_SARS_CORONAVIRUS_AND_INNATE_IMMUNITY"]]) %>%
+  mutate(Origin_file = "WP_SARS_CORONAVIRUS_AND_INNATE_IMMUNITY.csv",
+         Disease = "COVID-19")
+
+# BRONCHITIS
+bronchitis <- data.frame(MSigDB_input_master_cleaned[["HP_BRONCHITIS"]]) %>%
+  mutate(Origin_file = "HP_BRONCHITIS.csv",
+         Disease = "Bronchitis")
+
+# RESPIRATORY HYPERSENSITIVITY
+hypersensitivity <- data.frame(MSigDB_input_master_cleaned[["HP_IMMUNOLOGIC_HYPERSENSITIVITY"]]) %>%
+  mutate(Origin_file = "HP_IMMUNOLOGIC_HYPERSENSITIVITY.csv",
+         Disease = "Respiratory hypersensitivity")
+```
+
+# Create list of cleaned MSigDB lists
+```{r}
+# Create MSigDB master list
+MSigDB_master <- list(asthma, copd, ild, pneumonia, influenza, covid, bronchitis, hypersensitivity)
+names(MSigDB_master) <- disease_names
+```
+
+# HUMAN DISEASE MASTER LIST GENERATION AND CLEANING
+
+## Combine into master list and generate df to clean
+```{r}
+# Create master CTD and MSigDB list
+Disease_master <- c(CTD_master, MSigDB_master)
+
+
+# Create dataframe of list elements to save as .csv
+# Remove list names so they're not added onto column names
+names(Disease_master) <- NULL
+
+# Create df to use as basis for bind_rows in for-loop
+Disease_master_df <- as.data.frame(Disease_master[1], row.names = NULL, col.names = names(Disease_master[1]))
+iteration = 1
+
+# Loop through Disease_master to bind all exposures to main df
+for (i in Disease_master) {
+  iteration=iteration+1
+  input = Disease_master_df
+  
+  Disease_master_df <- bind_rows(input, as.data.frame(Disease_master[iteration], row.names = NULL, col.names = names(Disease_master[iteration])))
+}
+
+# Save dataframe as raw combined human disease list (contains duplicates)
+#write.csv(Disease_master_df, "2_MasterGeneLists/Disease_Human_Master_raw.csv", row.names = FALSE)
+```
+
+## Remove duplicate Gene_symbol values, keeping whichever has the higher Inference_score (e.g. prioritize keeping the duplicate associated with MSigDB)
+```{r}
+# Create function to group Gene_symbol by descending Inference_score and then remove duplicated Gene_symbol, keeping row with highest Inference_score.
+remove_dups <- function(data_df) {
+  data_df <- data_df %>% 
+    group_by(Disease, Gene_symbol) %>%
+    arrange(-Inference_score) %>%
+    filter(!duplicated(Gene_symbol))
+  return(data_df)
+}
+
+# Apply function to all disease dataframes in a list
+Disease_master_df_nondup <- remove_dups(Disease_master_df)
+
+# Save dataframe as raw combined human disease list (contains duplicates)
+#write.csv(Disease_master_df_nondup, "2_MasterGeneLists/Disease_Human_Master_nonduplicate.csv", row.names = FALSE)
+```
+
+# MOUSE EXPOSURE DATA CLEANING
+
+## Read-in mouse exposure data
+
+```{r}
+# Create list of file names (will use as file path for function below)
+expo_deseq <- list.files(path="2_MasterGeneLists/StatResults_RUV_Sarah",
+                         pattern="_4h_Lung.csv")
+
+# Make list of file names and clean so you can use to rename list below
+expo_deseq_names <- gsub(".csv","", expo_deseq)
+expo_deseq_names <- gsub("022821_Stat_Results_RUV_","", expo_deseq_names)
+expo_deseq_names <- gsub("_4h_Lung","", expo_deseq_names)
+
+# Read-in all mouse exposure DESEeq2 .csv files
+setwd("2_MasterGeneLists/StatResults_RUV_Sarah")
+expo_deseq_master <- lapply(expo_deseq, function(x) {
+  read.table(file = x,
+             sep = ',',
+             header = TRUE)
+})
+
+# Rename list elements with condition
+names(expo_deseq_master) <- expo_deseq_names
+
+# Remove LPS from list and names
+expo_deseq_master <- expo_deseq_master[-3]
+expo_deseq_names <- expo_deseq_names[-3]
+```
+
+There are 10 exposures with 17,356 gene probes (e.g. same gene, different transcripts) per exposure.
+
+## Clean raw exposure data in preparation for ortholog conversion
+
+```{r}
+# Write function
+add_condition <- function(data, name){
+  data <- data %>%
+    mutate(Exposure = name) %>% # Add column with exposure condition
+    separate("gene", into = c("Mouse_gene", NA), sep = "_") #Rename gene column and remove transcript identifier (need this for ortholog conversion)
+}
+
+# Apply function
+expo_deseq_master <- mapply(add_condition, expo_deseq_master, names(expo_deseq_master), SIMPLIFY = FALSE)
+```
+
+There are 10 exposures still with 17,356 gene probes (e.g. same gene, different transcripts) per exposure.
+
+## Bind lists into df
+
+```{r}
+# Remove list names so they're not added onto column names
+names(expo_deseq_master) <- NULL
+
+# Create df to use as basis for bind_rows in for-loop
+expo_deseq_master_df <- as.data.frame(expo_deseq_master[1], row.names = NULL, col.names = names(expo_deseq_master[1]))
+iteration = 1
+
+# Loop through expo_deseq_master to bind all exposures to main df
+for (i in expo_deseq_master) {
+  iteration=iteration+1
+  input = expo_deseq_master_df
+  
+  expo_deseq_master_df <- bind_rows(input, as.data.frame(expo_deseq_master[iteration], row.names = NULL, col.names = names(expo_deseq_master[iteration])))
+}
+```
+
+The new data frame contains 173,560 objects because it bound all 17,356 gene probes (e.g. same gene, different transcripts) per exposure.
+
+## Convert mouse exposure genes to human orthologs.
+
+```{r}
+# Make df of all unique Mouse_gene in exposure data
+expo_genes_MOUSE <- data.frame(
+  Mouse_gene = character(),
+  stringsAsFactors = FALSE)
+expo_genes_MOUSE <- unique(expo_deseq_master_df["Mouse_gene"])
+
+# Make function for converting orthologs 
+mouse_to_human <- function(data_df) {
+  
+  # Prepare input (function needs dummy column to put new genes)
+  input_df <- data_df %>%
+    mutate(dummy = NA) %>%
+    data.frame()
+
+  # Run ortholog conversion
+  human_gene_df <- orthogene::convert_orthologs(
+    input_df[1:nrow(input_df),],
+    gene_input = "Mouse_gene",
+    gene_output = "columns",
+    standardise_genes = FALSE,
+    input_species = "mouse",
+    output_species = "human",
+    method = "homologene",
+    drop_nonorths = TRUE,
+    non121_strategy = "drop_both_species",
+    mthreshold = Inf,
+    as_sparse = FALSE,
+    sort_rows = FALSE,
+    verbose = TRUE) 
+  
+  # Clean ortholog conversion output
+  human_gene_df <- human_gene_df %>%
+    rename("ortholog_gene" = "Human_gene", "input_gene" = "Mouse_gene")
+
+  return(human_gene_df)
+  
+}
+
+# Apply function to generate human exposure data genes
+expo_genes_HUMAN <- mouse_to_human(expo_genes_MOUSE)
+
+# Match human genes back to exposure data and remove rows where no human match was made
+expo_deseq_master_df_HUMAN <- left_join(expo_deseq_master_df, expo_genes_HUMAN, by = "Mouse_gene") %>%
+  relocate(Human_gene, .after = Mouse_gene)
+expo_deseq_master_df_HUMAN <- expo_deseq_master_df_HUMAN[!is.na(expo_deseq_master_df_HUMAN$Human_gene), ]
+
+# Save human version of exposure data (Remember we haven't removed transcripts yet)
+#write.csv(expo_deseq_master_df_HUMAN, "2_MasterGeneLists/Exposure_Human_Master_raw.csv", row.names = FALSE)
+```
+
+
+# DESCRIPTIVE STATISTICS AND PLOTS ASSOCIATED WITH CONVERSIONS
+
+## Exposure data: Determine how many genes were dropped in mouse-to-human conversion by exposure
+
+```{r}
+# Count mouse genes
+count_mouse_genes <- function(df) {
+  df %>%
+    group_by(Exposure) %>%
+    summarise(
+      Original_mouse = sum(!is.na(Mouse_gene)),
+      Original_mouse_unique = n_distinct(Mouse_gene[!is.na(Mouse_gene)]),
+      .groups = "drop"
+    )
+}
+result1 <- count_mouse_genes(expo_deseq_master_df)
+print(result1)
+
+# Count human genes
+count_human_genes <- function(df) {
+  df %>%
+    group_by(Exposure) %>%
+    summarise(
+      Converted_human = sum(!is.na(Human_gene)),
+      Converted_human_unique = n_distinct(Human_gene[!is.na(Human_gene)]),
+      .groups = "drop"
+    )
+}
+result2 <- count_human_genes(expo_deseq_master_df_HUMAN)
+print(result2)
+
+# Take difference to find number dropped
+dropped <- full_join(result1, result2, by = "Exposure") %>%
+  mutate(Dropped_genes_total = (Original_mouse - Converted_human),
+         Perc_dropped_total = (Dropped_genes_total / Original_mouse) * 100,
+         Perc_dropped_total = round(Perc_dropped_total, 1),
+         Dropped_genes_unique = (Original_mouse_unique - Converted_human_unique),
+         Perc_dropped_unique = (Dropped_genes_unique / Original_mouse) * 100,
+         Perc_dropped_unique = round(Perc_dropped_unique, 1))
+print(dropped)
+```
+
+## Disease data: Determine how many duplicate genes were dropped
+
+```{r}
+# Count total genes before removing duplicates
+count_total_genes <- function(df) {
+  df %>%
+    group_by(Disease, Database) %>%
+    summarise(Total_genes = sum(!is.na(Gene_symbol)), .groups = "drop")
+}
+result1 <- count_total_genes(Disease_master_df)
+print(result1)
+
+# Count non-duplicate genes
+count_nondup_genes <- function(df) {
+  df %>%
+    group_by(Disease, Database) %>%
+    summarise(
+      Nonduplicate_genes = sum(!is.na(Gene_symbol)), .groups = "drop")
+}
+result2 <- count_nondup_genes(Disease_master_df_nondup)
+print(result2)
+
+# Take difference to find number dropped
+dropped <- full_join(result1, result2, by = c("Disease", "Database")) %>%
+  mutate(Dropped_genes = (Total_genes - Nonduplicate_genes),
+         Perc_dropped = (Dropped_genes / Total_genes) * 100,
+         Perc_dropped = round(Perc_dropped, 1))
+print(dropped)
+```
+
+## Disease data: Generate UpSet plots to look at how many genes are shared across groups
+
+```{r}
+# Clean data for comparisons
+# Select for disease, filter for genes, rename column to disease (will need to be the same for intersecting and pulling shared gene names later), and change gene names to lowercase
+WildfireSim_asthma <- Disease_master_df_nondup %>%
+  filter(Disease == "Asthma") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_bronch <- Disease_master_df_nondup %>%
+  filter(Disease == "Bronchitis") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_copd <- Disease_master_df_nondup %>%
+  filter(Disease == "COPD") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_covid <- Disease_master_df_nondup %>%
+  filter(Disease == "COVID-19") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_ild <- Disease_master_df_nondup %>%
+  filter(Disease == "ILD") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_influ <- Disease_master_df_nondup %>%
+  filter(Disease == "Influenza") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_pneum <- Disease_master_df_nondup %>%
+  filter(Disease == "Pneumonia") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+WildfireSim_resphyp <- Disease_master_df_nondup %>%
+  filter(Disease == "Respiratory hypersensitivity") %>%
+  ungroup() %>%
+  select(Gene_symbol)
+```
+
+## Generate UpSet plots
+```{r}
+library(ComplexHeatmap)
+
+lt <- list(Asthma = WildfireSim_asthma$Gene_symbol,
+           Bronchitis = WildfireSim_bronch$Gene_symbol,
+           COPD = WildfireSim_copd$Gene_symbol,
+           "COVID-19" = WildfireSim_covid$Gene_symbol,
+           ILD = WildfireSim_ild$Gene_symbol,
+           Influenza = WildfireSim_influ$Gene_symbol,
+           Pneumonia = WildfireSim_pneum$Gene_symbol,
+           Hypersensitivity = WildfireSim_resphyp$Gene_symbol)
+list_to_matrix(lt)
+
+m1 = make_comb_mat(lt) # the default mode is `distinct`
+m2 = make_comb_mat(lt, mode = "intersect")
+m3 = make_comb_mat(lt, mode = "union")
+
+# Distinct
+p1 <- UpSet(m1,
+            set_order = c("Asthma", "Bronchitis", "COPD", "COVID-19", "ILD", "Influenza", "Pneumonia", "Hypersensitivity"), comb_order = order(comb_size(m1)),
+            pt_size = unit(5, "mm"), lwd = 3,
+            #comb_col = c("#1E88E5", "#D81B60", "#FFC107")[comb_degree(m1)],
+            comb_col = c("#CCFFCC", "#99FF99", "#66FF66", "#33CC33", "#009900", "#006600", "#004400", "#002200")[comb_degree(m1)],
+            right_annotation = upset_right_annotation(m1,
+                                                      gp = gpar(fill = "black")))
+p1
+p1L <- UpSet(m1,
+            set_order = c("Asthma", "Bronchitis", "COPD", "COVID-19", "ILD", "Influenza", "Pneumonia", "Hypersensitivity"), comb_order = order(comb_size(m1)),
+            pt_size = unit(5, "mm"), lwd = 3,
+            #comb_col = c("#1E88E5", "#D81B60", "#FFC107")[comb_degree(m1)],
+            comb_col = c("#CCFFCC", "#99FF99", "#66FF66", "#33CC33", "#009900", "#006600", "#004400", "#002200")[comb_degree(m1)],
+            top_annotation = upset_top_annotation(m1, add_numbers = TRUE),
+            right_annotation = upset_right_annotation(m1,
+                                                      gp = gpar(fill = "black"),
+                                                      width = unit(3, "cm"),
+                                                      add_numbers = TRUE))
+p1L
+
+# Intersect
+p2 <- UpSet(m2,
+            set_order = c("Asthma", "Bronchitis", "COPD", "COVID-19", "ILD", "Influenza", "Pneumonia", "Hypersensitivity"), comb_order = order(comb_size(m2)),
+            pt_size = unit(5, "mm"), lwd = 3,
+            comb_col = c("#E6CCFF", "#D1B3FF", "#B266FF", "#9933FF", "#8000FF", "#6600CC", "#4B0082", "#2E003E")[comb_degree(m2)],
+            right_annotation = upset_right_annotation(m2,
+                                                      gp = gpar(fill = "black")))
+p2
+p2L <- UpSet(m2,
+            set_order = c("Asthma", "Bronchitis", "COPD", "COVID-19", "ILD", "Influenza", "Pneumonia", "Hypersensitivity"), comb_order = order(comb_size(m2)),
+            pt_size = unit(5, "mm"), lwd = 3,
+            comb_col = c("#E6CCFF", "#D1B3FF", "#B266FF", "#9933FF", "#8000FF", "#6600CC", "#4B0082", "#2E003E")[comb_degree(m2)],
+            top_annotation = upset_top_annotation(m2,
+                                                  height = unit(4, "cm"),
+                                                  add_numbers = TRUE),
+            right_annotation = upset_right_annotation(m2,
+                                                      gp = gpar(fill = "black"),
+                                                      width = unit(3, "cm"),
+                                                      add_numbers = TRUE))
+p2L
+```
+
+## Export UpSet plots
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r eval = FALSE}
+pdf("3_DescriptiveFigures/250507_Disease_UpSet_Distinct.pdf", height = 6, width = 16)
+p1
+invisible(dev.off())
+pdf("3_DescriptiveFigures/250507_Disease_UpSet_Distinct_labeled.pdf", height = 6, width = 16)
+p1L
+invisible(dev.off())
+
+pdf("3_DescriptiveFigures/250507_Disease_UpSet_Intersect.pdf", height = 8, width = 20)
+p2
+invisible(dev.off())
+pdf("3_DescriptiveFigures/250507_Disease_UpSet_Intersect_labeled.pdf", height = 8, width = 20)
+p2L
+invisible(dev.off())
+```

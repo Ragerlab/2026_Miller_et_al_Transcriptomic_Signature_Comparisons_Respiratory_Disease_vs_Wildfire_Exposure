@@ -1,0 +1,271 @@
+---
+title: "MCA_analysis"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-06-28"
+---
+
+# Libraries
+```{r, message = F, warning = F}
+library(tidyverse)
+library(janitor)
+library(FactoMineR)
+library(factoextra)
+# library(piano)
+library(cluster)
+library(vegan)
+library(pheatmap) 
+library(ggrepel)
+library(openxlsx)
+```
+
+
+# MCA analysis
+```{r, message = F, warning = F}
+# Read in and format data
+# df <- read.csv('..\\Raw_data\\231004_ExpoDis_dfMaster_SubsetAnalysis.csv') %>%
+#df <- read.csv('..\\Raw_data\\240720_ExpoDis_dfMaster_SubsetLABELED.csv') %>%
+
+#df <- read.xlsx("4_CountMatrix_Jaccard/250515_500_CountMatrix.xlsx", sheet = 1) %>%
+#df <- read.xlsx("4_CountMatrix_Jaccard/250508_500_CountMatrix.xlsx", sheet = 1) %>%
+df <- read.xlsx("4_CountMatrix_Jaccard/250519_500_CountMatrix_MultiMeasures.xlsx", sheet = 1) %>%
+  t(.) %>%
+  as.data.frame() %>%
+  row_to_names(., row_number = 1) #%>%
+  # .[12:20,]
+
+# Check number of sig genes per condition
+df_num <- mutate_all(df, function(x) as.numeric(as.character(x)))
+counts <- rowSums(df_num) %>% 
+  as.data.frame()
+counts
+
+# Add in exposure/disease label 
+disease <- c("Asthma", "Hypersensitivity","COPD", "ILD", "Pneumonia", "Bronchitis", "Influenza", "COVID-19")
+df_lab <- df_num %>%
+  mutate(Group = ifelse(rownames(.) %in% disease, 'Disease', 'Exposure')) 
+
+# Run MCA
+res.mca <- MCA(df)
+
+# Scree plot
+fviz_screeplot(res.mca, addlabels = TRUE) # Shows the amount of variance explained by the top components
+
+# Extract coordinates for each exposure/disease
+mca_coords <- as.data.frame(res.mca$ind$coord)
+
+# Combine with group data
+plot_data <- cbind(mca_coords, Group = df_lab$Group)
+plot_data$Labels <- rownames(plot_data)
+plot_data[,1:2] <- round(plot_data[,1:2], 4)
+
+# Specify the coordinates or condition for the point you want to label
+label_this_point <- (plot_data$`Dim 1` == -0.0481 | plot_data$`Dim 1` == 0.2505 | plot_data$`Dim 1` == 0.3398) & (plot_data$`Dim 2` == 0.9521 | plot_data$`Dim 2` == 0.3006 | plot_data$`Dim 2` == -0.0301)
+
+# Reorder the factor levels for the 'Group' variable
+plot_data$Group <- factor(plot_data$Group, levels = c("Exposure", "Disease"))
+
+
+# Create the plot for both datasets
+# Create the ggplot for exposures
+p <- ggplot(plot_data, aes(x = `Dim 1`, y = `Dim 2`, color = Group)) +
+    geom_point(size = 1) +
+    geom_text_repel(data = subset(plot_data, label_this_point), aes(label = Labels), show.legend = FALSE, size = 2.5) +
+    theme_classic() +
+    scale_color_manual(values = c('#94221F','#3E7274')) + 
+    xlab('Dim 1 (15.6%)') +
+    ylab('Dim 2 (10.2%)') +
+    theme(text = element_text(size = 8)) +
+    theme(element_line(color = 'black', size = 1.5)) +
+    theme(axis.line = element_line(size = 0.5)) +
+    theme(legend.text = element_text(size = 8),
+          legend.key.size = unit(0.05, "cm"),
+          legend.position = 'bottom') 
+ggsave(file = "7_MCA_Chappel/MCA_plot_subset.png", p, width = 2.3, height = 2.3)
+
+
+# Create the ggplot for exposures
+p <- ggplot(plot_data, aes(x = `Dim 1`, y = `Dim 2`, color = Group)) +
+    geom_point(size = 1) +
+    geom_text_repel(aes(label = rownames(plot_data)),
+                    size = 3,
+                    box.padding = 0.2,   # Increase padding around the label box
+                    point.padding = 0.2, # Increase space between the point and the label
+                    max.overlaps = Inf,  # Allow for more overlaps before force repulsion
+                    force = 2) +
+    # geom_text_repel(data = subset(plot_data, label_this_point), aes(label = Labels), show.legend = FALSE, size = 2.5) +
+    theme_classic() +
+#    scale_color_manual(values = c('#94221F')) + 
+    xlab('Dim 1 (16.7%)') +
+    ylab('Dim 2 (15.6%)') +
+    theme(text = element_text(size = 8)) +
+    theme(element_line(color = 'black', size = 1.5)) +
+    theme(axis.line = element_line(size = 0.5)) +
+    theme(legend.position = 'none')
+ggsave(file = "7_MCA_Chappel/MCA_plot_subset_exp.png", p, width = 3.3, height = 3.3)
+
+# Create plot for diseases
+p <- ggplot(plot_data, aes(x = `Dim 1`, y = `Dim 2`, color = Group)) +
+    geom_point(size = 1) +
+    geom_text_repel(
+        aes(label = rownames(plot_data)),
+        size = 3,  # Adjust text size as needed
+        box.padding = unit(0.35, "lines"),  # Padding around the label
+        point.padding = unit(0.1, "lines"),  # Minimal padding from point to text
+        segment.color = 'grey50',  # Color of the connector line
+        segment.size = 0.5,  # Thickness of the connector line
+        force = 10,  # Force of repulsion
+        nudge_x = 0.05,  # Horizontal adjustment
+        nudge_y = 0.05,  # Vertical adjustment
+    ) +
+    theme_classic() +
+#    scale_color_manual(values = c('#3E7274')) +
+    xlab('Dim 1 (19.6%)') +
+    ylab('Dim 2 (17.4%)') +
+    theme(
+        text = element_text(size = 10),
+        axis.line = element_line(size = 0.8),
+        legend.text = element_text(size = 10),
+        legend.key.size = unit(0.1, "cm"),
+        legend.position = 'none'  # Hide legend if unnecessary
+    )
+ggsave(file = "7_MCA_Chappel/MCA_plot_subset_dis.png", p, width = 3.3, height = 3.3)
+
+
+# Extract highest loading features from the first 3 components
+var <- get_mca_var(res.mca)$contrib # Pulls out contribution of each gene on the different components
+#top_comp1 <- rownames(var)[order(abs(var[,1]), decreasing = TRUE)[1:100]] # Determines how many genes you keep from component 1
+#top_comp2 <- rownames(var)[order(abs(var[,2]), decreasing = TRUE)[1:100]]
+top_comp1 <- rownames(var)[order(abs(var[,1]), decreasing = TRUE)] # Determines how many genes you keep from component 1
+top_comp2 <- rownames(var)[order(abs(var[,2]), decreasing = TRUE)]
+top_all <- c(top_comp1, top_comp2)
+top_all <- sub("_.*", "", top_all) %>%
+  unique()
+
+# Prune dataset to top genes
+df_sub <- df[, colnames(df) %in% top_all] %>%
+  mutate_all(., function(x) as.numeric(as.character(x)))
+write.csv(file = "7_MCA_Chappel/top_200_genes.csv", df_sub)
+
+#Use WSS and silhouette profile to identify the optimal number of clusters. This is subjective!! Generally look for "elbow point" in WSS and peak in silhouette profile. Could also look at "gap_stat" which is fairly common. Note, you will need to adjust your k.max to reflect the size of your data frame. It cant be >= the max number of rows you have.
+p <- fviz_nbclust(df_sub, kmeans, method = "wss", k.max = 8)
+ggsave(file = "7_MCA_Chappel/Conditions_scree.png", p, width = 3.3, height = 3.3)
+
+p <- fviz_nbclust(df_sub, kmeans, method = "silhouette", k.max = 8)
+ggsave(file = "7_MCA_Chappel/Conditions_silhouette.png", p, width = 3.3, height = 3.3)
+
+# Perform k-means
+kmeans_results <- kmeans(df_sub, centers = 3, nstart = 39)
+
+# Plot 
+row_names <- as.character(rownames(df_sub))
+
+# Specify the points you want to label
+labels_vector <- c('Influenza', 'COVID-19', 'Bronchitis')
+
+# Create a modified labels vector with labels for specified points and empty strings for others
+modified_labels <- ifelse(row_names %in% labels_vector, row_names, "")
+
+# Plot with modified labels
+p <- fviz_cluster(kmeans_results, data = df_sub,
+             label = row_names,
+             palette = c("#1F77B4", "#FF7F0E", "#2CA02C"),
+             geom = "point", shape = 16,  # Set the shape of points to circles
+             ellipse.type = "convex",
+             show.clust.cent = FALSE,  # Do not show cluster centers
+             ggtheme = theme_classic()
+             ) + 
+      ggtitle(NULL) +
+      theme(text = element_text(size = 8)) +
+      theme(element_line(color = 'black', size = 1.5)) +
+      theme(axis.line = element_line(size = 0.5)) +
+      theme(legend.text = element_text(size = 8),
+            legend.key.size = unit(0.05, "cm"),
+            legend.position = 'bottom') +
+      geom_text_repel(aes(label = modified_labels), color = "black", size = 2)
+ggsave(file = "7_MCA_Chappel/kmeans_plot.png", p, width = 3.3, height = 3)
+
+
+# Add in cluster labels to datafame we want to use for heatmap and arrange by cluster number
+cluster_assignments <- kmeans_results$cluster %>%
+  as.data.frame()
+colnames(cluster_assignments) <- 'cluster'
+
+# Merge df_sub and cluster_assignments by their row names
+df_sub <- merge(df_sub, cluster_assignments, by = "row.names")
+
+# Set the row names from the 'Row.names' column
+row.names(df_sub) <- df_sub$Row.names
+
+# Drop the 'Row.names' column
+df_sub <- df_sub[, -which(names(df_sub) == "Row.names")]
+ordered_conditions <- c(
+  "Flaming.eucalyptus", "Smoldering.eucalyptus", "Flaming.peat", "Smoldering.peat",
+  "Flaming.pine", "Flaming.pine.needles", "Smoldering.pine.needles", "Smoldering.pine",
+  "Flaming.red.oak", "Smoldering.red.oak", "Influenza", "COVID-19", "Bronchitis",
+  "Asthma", "COPD", "Hypersensitivity", "ILD", "Pneumonia"
+)
+
+df_sub<- df_sub[match(ordered_conditions, rownames(df_sub)), ] 
+
+# Now let's cluster the genes the same way. First transpose so genes are rows and remove the cluster column
+df_t <- as.data.frame(t(df_sub %>% select(!cluster)))
+
+#use WSS and silhouette profile to identify the optimal number of clusters
+p <- fviz_nbclust(df_t, kmeans, method = "wss", k.max = 8)
+ggsave(file = "7_MCA_Chappel/Genes_scree.png", p, width = 3.3, height = 3.3)
+
+p <- fviz_nbclust(df_t, kmeans, method = "silhouette", k.max = 8)
+ggsave(file = "7_MCA_Chappel/Genes_silhouette.png", p, width = 3.3, height = 3.3)
+
+# Perform k-means
+kmeans_results_gene <- kmeans(df_t, centers = 3, nstart = 35)
+
+# Add in cluster labels to datafame and arrange by cluster number
+cluster_assignments_gene <- kmeans_results_gene$cluster %>%
+  as.data.frame()
+colnames(cluster_assignments_gene) <- 'cluster'
+# Merge 'df_t' with 'cluster_assignments_gene' by their row names
+df_t <- merge(df_t, cluster_assignments_gene, by = "row.names")
+
+# Set the row names from the 'Row.names' column
+row.names(df_t) <- df_t$Row.names
+
+# Drop the 'Row.names' column
+df_t <- df_t[, -which(names(df_t) == "Row.names")]
+df_t <- df_t %>% arrange(cluster)
+
+# Specify new column order for heatmap dataframe to reflect clustered pathways
+new_col_order <- rownames(df_t)
+new_col_order <- c(c("cluster"),new_col_order)
+
+# Arrange genes in original df to match our clustering
+hm_data <- df_sub %>% select(new_col_order)
+
+#add an index value into the dataframe so we can add splits between clusters in heatmap (if desired)
+hm_data$index <- 1:nrow(hm_data)
+
+#Make lists of where breaks should be placed in the heatmap to separate clusters of samples
+seprows <- hm_data %>% group_by(cluster) %>% slice_max(n=1, order_by=index)
+seprows <- sort(seprows$index)
+hm_data <- hm_data %>% 
+  select(-cluster, -index)
+
+#Make heatmap. Obviously adjust color and sizes as needed.
+p1 <- pheatmap(hm_data,
+         main="Jaccard Clustering",
+         cluster_rows=F,
+         cluster_cols = T,
+         show_rownames = TRUE,
+         show_colnames = FALSE,
+         color = c("gray75","purple2"),
+         breaks = c(0, 0.5, 1),
+         legend = FALSE,
+         gaps_row = seprows
+)
+
+p1
+ggsave(file = "7_MCA_Chappel/heatmap_subset.png", p1, width = 7.5, height = 3)
+
+```
