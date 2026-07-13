@@ -45,6 +45,9 @@ names(countmatrices_master) <- input_names
 # Remove 250520
 countmatrices_master <- countmatrices_master[-2]
 input_names <- input_names[-2]
+# Remove 260709 element because supplementary material (750_plusLPS)
+countmatrices_master <- countmatrices_master[-6]
+input_names <- input_names[-6]
 
 
 # Write function to clean column names
@@ -79,6 +82,10 @@ names(scores_master) <- input_names
 # Remove 250520 element because 250521 is same filtering, but with updated input_values naming scheme (easier to plot)
 scores_master <- scores_master[-2]
 input_names <- input_names[-2]
+# Remove 260709 element because supplementary material (750_plusLPS)
+scores_master <- scores_master[-6]
+input_names <- input_names[-6]
+
 
 # Write function to add GeneNum and Date_filter columns
 clean_scores <- function(data_list) {
@@ -178,175 +185,6 @@ pJExp <- ggplot(scores_master_df %>% filter(Coefficient == paste0(coeff)), aes(x
     panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
   )
 #ggsave(pJExp, file = paste0("5_Figures/1_ComparisonFigures/", date, "_", coeff, "Raw.png"), width = 8, height = 8)
-
-
-
-
-
-
-
-
-
-
-
-pJExpSc <- ggplot(scores_master_df, aes(x=Exposure, y=Jaccard_ExpSc)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(color = Disease), size=2) +
-  labs(x = "",
-       y = "Jaccard (scaled within exposures)",
-       title = "Distribution of scaled within exposures Jaccard indices") +
-  #facet_wrap(~GeneNum, nrow = 1) +
-  facet_wrap(~Date_filter, nrow = 1) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pJExpSc
-
-pJExp2 <- ggplot(scores_master_df, aes(x=Exposure, y=Jaccard_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  #geom_jitter(aes(color = GeneNum), size=2) +
-  geom_jitter(aes(color = Date_filter), size=2) +
-  labs(x = "",
-       y = "Jaccard (raw)",
-       title = "Distribution of raw Jaccard indices") +
-  facet_wrap(~Disease, nrow = 2) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pJExp2
-
-# Overlap
-pOExp <- ggplot(scores_master_df, aes(x=Exposure, y=Overlap_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(color = Disease), size=2) +
-  labs(x = "",
-       y = "Overlap (raw)",
-       title = "Distribution of raw Overlap indices") +
-  #facet_wrap(~GeneNum, nrow = 1) +
-  facet_wrap(~Date_filter, nrow = 1) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pOExp
-
-pOExp2 <- ggplot(scores_master_df, aes(x=Exposure, y=Overlap_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  #geom_jitter(aes(color = GeneNum), size=2) +
-  geom_jitter(aes(color = Date_filter), size=2) +
-  labs(x = "",
-       y = "Overlap (raw)",
-       title = "Distribution of raw Overlap indices") +
-  facet_wrap(~Disease, nrow = 2) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pOExp2
-
-# Soerensen
-pSExp <- ggplot(scores_master_df, aes(x=Exposure, y=Soerensen_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(color = Disease), size=2) +
-  labs(x = "",
-       y = "Soerensen (raw)",
-       title = "Distribution of raw Soerensen indices") +
-  #facet_wrap(~GeneNum, nrow = 1) +
-  facet_wrap(~Date_filter, nrow = 1) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pSExp
-
-pSExp2 <- ggplot(scores_master_df, aes(x=Exposure, y=Soerensen_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  #geom_jitter(aes(color = GeneNum), size=2) +
-  geom_jitter(aes(color = Date_filter), size=2) +
-  labs(x = "",
-       y = "Soerensen (raw)",
-       title = "Distribution of raw Soerensen indices") +
-  facet_wrap(~Disease, nrow = 2) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pSExp2
-
-
-
-
-
-# By Disease
-pDis <- ggplot(scores_master_df, aes(x=Disease, y=Jaccard_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(color = Exposure), size=2) +
-  labs(x = "",
-       y = "Jaccard (raw)",
-       title = "Distribution of raw Jaccard indices") +
-  #facet_wrap(~GeneNum, nrow = 1) +
-  facet_wrap(~Date_filter, nrow = 1) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pDis
-
-pDis <- ggplot(scores_master_df, aes(x=Disease, y=Jaccard_DisSc)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(color = Exposure), size=2) +
-  labs(x = "",
-       y = "Jaccard (scaled with Disease)",
-       title = "Distribution of scaled Jaccard indices") +
-  #facet_wrap(~GeneNum, nrow = 1) +
-  facet_wrap(~Date_filter, nrow = 1) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pDis
-
-pDis2 <- ggplot(scores_master_df, aes(x=Disease, y=JSI_raw)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(color = GeneNum), size=2) +
-  labs(x = "",
-       y = "JSI (raw)",
-       title = "Distribution of raw Jaccard indices") +
-  facet_wrap(~Exposure, nrow = 2) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
-    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
-    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
-  )
-pDis2
 ```
 
 ## Save plots
@@ -360,12 +198,16 @@ ggsave(pDis2, file = paste0("5_Figures/", date, "_Dis_byExp.png"), width = 8, he
 ## Plot distribution of SCALED Jaccard indices
 
 ```{r}
+# Create Jaccard-specific dataframe
+jaccard_master_df <- scores_master_df %>%
+  filter(Coefficient == "Jaccard")
+
 # Refactor columns
 jaccard_master_df$GeneNum <- factor(jaccard_master_df$GeneNum, levels = c("500", "750", "1000"))
 jaccard_master_df$Exposure <- factor(jaccard_master_df$Exposure, levels = c("Flaming eucalyptus", "Smoldering eucalyptus","Flaming peat","Smoldering peat","Flaming pine","Smoldering pine","Flaming pine needles","Smoldering pine needles","Flaming red oak","Smoldering red oak"))
 
 # By Exposure
-pExp <- ggplot(jaccard_master_df, aes(x=Exposure, y=JSI_raw)) +
+pExp <- ggplot(jaccard_master_df, aes(x=Exposure, y=Index_raw)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(aes(color = Disease), size=2) +
   labs(x = "",
@@ -381,7 +223,7 @@ pExp <- ggplot(jaccard_master_df, aes(x=Exposure, y=JSI_raw)) +
   )
 pExp
 
-pExp2 <- ggplot(jaccard_master_df, aes(x=Exposure, y=JSI_raw)) +
+pExp2 <- ggplot(jaccard_master_df, aes(x=Exposure, y=Index_raw)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(aes(color = GeneNum), size=2) +
   labs(x = "",
@@ -398,7 +240,7 @@ pExp2 <- ggplot(jaccard_master_df, aes(x=Exposure, y=JSI_raw)) +
 pExp2
 
 # By Disease
-pDis <- ggplot(jaccard_master_df, aes(x=Disease, y=JSI_raw)) +
+pDis <- ggplot(jaccard_master_df, aes(x=Disease, y=Index_raw)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(aes(color = Exposure), size=2) +
   labs(x = "",
@@ -414,7 +256,7 @@ pDis <- ggplot(jaccard_master_df, aes(x=Disease, y=JSI_raw)) +
   )
 pDis
 
-pDis2 <- ggplot(jaccard_master_df, aes(x=Disease, y=JSI_raw)) +
+pDis2 <- ggplot(jaccard_master_df, aes(x=Disease, y=Index_raw)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(aes(color = GeneNum), size=2) +
   labs(x = "",
@@ -1298,6 +1140,7 @@ pHeat2 <- heatplot(Reactome_ORA_results_symbols, showCategory=10)
 # Tree plot
 Reactome_ORA_results_symbols2 <- pairwise_termsim(Reactome_ORA_results_symbols) #Calculate pair-wise similarities
 pTree <- treeplot(Reactome_ORA_results_symbols2, hclust_method = "average")
+#pTree <- treeplot(Reactome_ORA_results_symbols2, hclust_method = "average", nCluster = 10)
 pTree
 
 # Enrichment map organizes enriched terms into a network with edges connecting overlapping gene sets. In this way, mutually overlapping gene sets are tend to cluster together, making it easy to identify functional module.
@@ -1335,5 +1178,6 @@ ggsave(pCNet, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerRea
 ggsave(pHeat, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Heat5.png"), width = 6, height = 3)
 ggsave(pHeat2, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Heat10.png"), width = 8, height = 4)
 ggsave(pTree, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Tree.png"), width = 15, height = 8)
+#ggsave(pTree, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Tree_nClust10.png"), width = 15, height = 12)
 ggsave(pEnrich, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_EnrichMap.png"), width = 12, height = 8)
 ```
