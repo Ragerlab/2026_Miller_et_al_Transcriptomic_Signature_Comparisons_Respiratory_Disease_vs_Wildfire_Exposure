@@ -1,0 +1,1226 @@
+---
+title: "C_WildfireSim_PostAnalysisNeeds_v2"
+author: "Sarah Miller"
+date: "2025-05-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(ggplot2)
+library(gtools)
+library(openxlsx)
+library(readr)
+#BiocManager::install("clusterProfiler")
+library(clusterProfiler)
+
+#date = 250523
+#date = 260421
+date = 260710
+```
+
+# COUNT MATRIX-BASED ANALYSES
+
+## Read-in count matrices
+```{r}
+# Create list of file names (will use as file path for function below)
+input <- list.files(path="4_CountMatrix_Jaccard",
+                    pattern="260709_750_plusLPS_CountMatrix_MultiMeasures.xlsx") # Only read-in plusLPS
+
+# Make list of file names and clean so you can use to rename list below
+input_names <- gsub("_CountMatrix_MultiMeasures.xlsx","", input)
+
+# Read-in files
+setwd("4_CountMatrix_Jaccard")
+countmatrices_master <- lapply(input, function(x) {
+  read.xlsx(x, sheet = "count_matrix")
+})
+
+# Rename list elements with condition
+names(countmatrices_master) <- input_names
+
+# Write function to clean column names
+clean_CM <- function(data){
+  names(data) <- gsub("\\.", "_", names(data)) #Replace periods with underscores in column names
+  return(data)
+}
+
+# Apply function
+countmatrices_master <- lapply(countmatrices_master, clean_CM)
+```
+
+# SIMILARITY COEFFICIENT ANALYSES
+
+## Read-in similarity index data
+```{r}
+# Create list of file names (will use as file path for function below)
+input <- list.files(path="4_CountMatrix_Jaccard",
+                    pattern="260709_750_plusLPS_CountMatrix_MultiMeasures.xlsx") # Only read-in plusLPS
+
+# Make list of file names and clean so you can use to rename list below
+input_names <- gsub("_CountMatrix_MultiMeasures.xlsx","", input)
+
+# Read-in files
+setwd("4_CountMatrix_Jaccard")
+scores_master <- lapply(input, function(x) {
+  read.xlsx(x, sheet = "input_values")
+})
+
+# Rename list elements with condition
+names(scores_master) <- input_names
+
+# Write function to add GeneNum and Date_filter columns
+clean_scores <- function(data_list) {
+  result_list <- list() #Make empty list
+  for (name in names(data_list)) {
+    df <- data_list[[name]] #Extract list element name
+    gene_num <- sub(".*?_", "", name) #Extract everything after the first underscore
+    df <- df %>% mutate(GeneNum = gene_num) #Add as a column
+    date_filter <- sub("_.*", "", name) #Extract everything before the first underscore
+    df <- df %>% mutate(Date_filter = date_filter) #Add as a column
+    result_list[[name]] <- df #Assign back to list
+  }
+
+  return(result_list)
+}
+
+# Apply function
+scores_master <- clean_scores(scores_master)
+```
+
+## Make dataframe of all data (Jaccard, Overlap, Dice; raw, Exp-scaled, Dis-scaled) to make plotting easier
+
+```{r}
+# Remove list names so they're not added onto column names
+names(scores_master) <- NULL
+
+# Create df to use as basis for bind_rows in for-loop
+scores_master_df <- as.data.frame(scores_master[1], row.names = NULL, col.names = names(scores_master[1]))
+iteration = 1
+
+# Loop through Disease_master to bind all exposures to main df
+for (i in scores_master) {
+  iteration=iteration+1
+  input = scores_master_df
+  
+  scores_master_df <- bind_rows(input, as.data.frame(scores_master[iteration], row.names = NULL, col.names = names(scores_master[iteration])))
+}
+```
+
+## Plot distribution of RAW Jaccard indices
+
+```{r}
+# Refactor columns
+scores_master_df$GeneNum <- factor(scores_master_df$GeneNum, levels = c("750_plusLPS"))
+scores_master_df$Exposure <- factor(scores_master_df$Exposure, levels = c("Flaming_eucalyptus","Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak","LPS"))
+
+# BY EXPOSURE, RAW VALUES
+# Jaccard
+pJExp <- ggplot(scores_master_df %>% filter(Coefficient == "Jaccard"), aes(x=Exposure, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Disease), size=2) +
+  labs(x = "",
+       y = "Jaccard (raw)",
+       title = "Distribution of raw Jaccard indices") +
+  facet_grid(Date_filter ~ GeneNum) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 70, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pJExp
+#ggsave(pJExp, file = paste0("5_Figures/1_ComparisonFigures/", date, "_plusLPS_JaccardRaw.png"), width = 6, height = 5)
+
+# Overlap
+pJExp <- ggplot(scores_master_df %>% filter(Coefficient == "Overlap"), aes(x=Exposure, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Disease), size=2) +
+  labs(x = "",
+       y = "Overlap (raw)",
+       title = "Distribution of raw Overlap indices") +
+  facet_grid(Date_filter ~ GeneNum) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 70, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+#ggsave(pJExp, file = paste0("5_Figures/1_ComparisonFigures/", date, "_plusLPS_OverlapRaw.png"), width = 6, height = 5)
+
+# Dice
+coeff <- "Dice"
+pJExp <- ggplot(scores_master_df %>% filter(Coefficient == paste0(coeff)), aes(x=Exposure, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Disease), size=2) +
+  labs(x = "",
+       y = paste0(coeff, " (raw)"),
+       title = paste0("Distribution of raw ", coeff, " indices")) +
+  facet_grid(Date_filter ~ GeneNum) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 70, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+#ggsave(pJExp, file = paste0("5_Figures/1_ComparisonFigures/", date, "_plusLPS_", coeff, "Raw.png"), width = 6, height = 5)
+
+
+
+
+# By Disease (Jaccard only)
+# RAW
+coeff <- "Jaccard"
+pDis <- ggplot(scores_master_df %>% filter(Coefficient == paste0(coeff)), aes(x=Disease, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Exposure), size=2) +
+  labs(x = "",
+       y = paste0(coeff, " (raw)"),
+       title = paste0("Distribution of raw ", coeff, " indices")) +
+  facet_grid(Date_filter ~ GeneNum) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pDis
+
+# SCALED WITHIN DISEASE
+coeff <- "Jaccard"
+pDisSc <- ggplot(scores_master_df %>% filter(Coefficient == paste0(coeff)), aes(x=Disease, y=Index_DisSc)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Exposure), size=2) +
+  labs(x = "",
+       y = paste0(coeff, " (scaled with Disease)"),
+       title = paste0("Distribution of scaled ", coeff, " indices")) +
+  facet_grid(Date_filter ~ GeneNum) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pDisSc
+
+# RAW, by GeneNum
+coeff <- "Jaccard"
+pDis2 <- ggplot(scores_master_df %>% filter(Coefficient == paste0(coeff)), aes(x=Disease, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = GeneNum), size=2) +
+  labs(x = "",
+       y = "JSI (raw)",
+       title = "Distribution of raw Jaccard indices") +
+  labs(x = "",
+       y = paste0(coeff, " (raw)"),
+       title = paste0("Distribution of raw ", coeff, " indices by GeneNum")) +
+  facet_wrap(~Exposure, nrow = 2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pDis2
+```
+
+## Save plots
+```{r}
+ggsave(pDis, file = paste0("5_Figures/", date, "_plusLPS_Dis_raw.png"), width = 6, height = 5)
+ggsave(pDisSc, file = paste0("5_Figures/", date, "_plusLPS_Dis_scaled.png"), width = 6, height = 5)
+ggsave(pDis2, file = paste0("5_Figures/", date, "_plusLPS_Dis_byGeneNum.png"), width = 10, height = 4)
+```
+
+## Plot distribution of SCALED Jaccard indices
+
+```{r}
+# Create Jaccard-specific dataframe
+jaccard_master_df <- scores_master_df %>%
+  filter(Coefficient == "Jaccard",
+         Date_filter =="260709")
+
+# Refactor columns
+jaccard_master_df$GeneNum <- factor(jaccard_master_df$GeneNum, levels = c("750_plusLPS"))
+jaccard_master_df$Exposure <- factor(jaccard_master_df$Exposure, levels = c("Flaming_eucalyptus","Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak","LPS"))
+
+# By Exposure
+pExp <- ggplot(jaccard_master_df, aes(x=Exposure, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Disease), size=2) +
+  labs(x = "",
+       y = "JSI (raw)",
+       title = "Distribution of raw Jaccard indices") +
+  facet_wrap(~GeneNum, nrow = 1) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pExp
+
+pExp2 <- ggplot(jaccard_master_df, aes(x=Exposure, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = GeneNum), size=2) +
+  labs(x = "",
+       y = "JSI (raw)",
+       title = "Distribution of raw Jaccard indices") +
+  facet_wrap(~Disease, nrow = 2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pExp2
+
+# By Disease
+pDis <- ggplot(jaccard_master_df, aes(x=Disease, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = Exposure), size=2) +
+  labs(x = "",
+       y = "JSI (raw)",
+       title = "Distribution of raw Jaccard indices") +
+  facet_wrap(~GeneNum, nrow = 1) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pDis
+
+pDis2 <- ggplot(jaccard_master_df, aes(x=Disease, y=Index_raw)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = GeneNum), size=2) +
+  labs(x = "",
+       y = "JSI (raw)",
+       title = "Distribution of raw Jaccard indices") +
+  facet_wrap(~Exposure, nrow = 2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pDis2
+```
+
+## Save plots
+```{r}
+ggsave(pExp, file = paste0("5_Figures/", date, "_plusLPS_Exp_byGeneNum.png"), width = 10, height = 4)
+ggsave(pExp2, file = paste0("5_Figures/", date, "_plusLPS_Exp_byDis.png"), width = 8, height = 6)
+ggsave(pDis, file = paste0("5_Figures/", date, "_plusLPS_Dis_byGeneNum.png"), width = 10, height = 4)
+ggsave(pDis2, file = paste0("5_Figures/", date, "_plusLPS_Dis_byExp.png"), width = 8, height = 6)
+```
+
+
+# Generate histograms of highly shared genes
+```{r}
+# Write function to generate sum column
+clean_CM <- function(data){
+  data$sum <- rowSums(data[,2:ncol(data)]) #Sum across rows
+  data$Exposure_sum <- rowSums(data[,2:12]) #Sum across Exposure rows
+  data$Disease_sum <- rowSums(data[,13:20]) #Sum across Disease rows
+  data <- arrange(data, desc(sum)) #Order by descending sum so highly shared genes are at top
+  return(data)
+}
+
+# Apply function
+countmatrices_master <- lapply(countmatrices_master, clean_CM)
+#countmatrices_master <- lapply(countmatrices_master, clean_scores)
+
+# Assign INPUT to be used in histogram
+INPUT <- countmatrices_master[[1]]
+GeneNum = "750_plusLPS"
+#write_csv(INPUT, file = "4_CountMatrix_Jaccard/test.csv")
+
+# Create table to use as input for histogram
+# Define the range of numbers to count (1 through whatever is the max "sum" column value, e.g. highest number of exposures over which a given gene is shared)
+numbers_to_count <- 1:max(INPUT$sum, na.rm = TRUE)
+# Count occurrences of each number in the column
+count_table <- table(factor(INPUT$sum, levels = numbers_to_count))
+# Convert the count table to a data frame
+result_df <- data.frame(Number = as.integer(names(count_table)), Count = as.integer(count_table))
+
+# Define color sequence for histogram and define Number as characters
+#result_df$Color <- scales::col_numeric(palette = "Greens", domain = range(result_df$Count))(result_df$Count)
+result_df$Color <- scales::col_numeric(palette = "Purples", domain = range(result_df$Count))(result_df$Count)
+
+# Plot histogram
+pHist <-ggplot(result_df, aes(x=factor(Number), y=Count, fill=Color)) +
+  geom_col(color="black") +
+  scale_fill_identity() +
+  geom_text(aes(label = Count), vjust = -1, colour = "black") +
+  xlab("Number") +
+  labs(x = "Number of conditions where genes are shared",
+       y = "Number of shared genes") +
+  ylim(c(0, 2600)) +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill = "grey25", color = "black", size = 1),  # Change facet label background & add border
+    strip.text = element_text(color = "white", face = "bold"),  # Change facet label text color
+    panel.border = element_rect(color = "black", fill = NA, size = 1)  # Add black border around facets
+  )
+pHist
+
+# Save plot
+#ggsave(pHist, file = "5_Figures/250523_750_Histogram.png", width = 6, height = 4)
+ggsave(pHist, file = paste0("5_Figures/", date, "_750_plusLPS_Histogram_purple.png"), width = 6, height = 4)
+```
+
+# Create exposure vs disease distribution tables and plot
+```{r}
+# Write function
+make_distrib_table <- function(data){
+  # Create Exposure sum table
+  exp <- data[,c(1,21,22)]
+  exp <- exp %>%
+    mutate(Condition = "Exposure") %>%
+    dplyr::rename(Condition_counts = Exposure_sum)
+  # Create Disease sum table
+  dis <- data[,c(1,21,23)]
+  dis <- dis %>%
+    mutate(Condition = "Disease") %>%
+    dplyr::rename(Condition_counts = Disease_sum)
+  # Join together and arrange by Human_gene and descending sum column
+  data_newtable <- full_join(exp, dis)
+  data_newtable <- data_newtable %>%
+    group_by(Human_gene) %>%
+    arrange(desc(sum))
+  
+  return(data_newtable)
+}
+
+# Apply function
+condition_distrib <- lapply(countmatrices_master, make_distrib_table)
+
+
+# Assign INPUT
+INPUT <- condition_distrib[[1]]
+GeneNum = "750_plusLPS"
+# Make Human_gene a factor with levels in the order of appearance
+INPUT$Human_gene <- factor(INPUT$Human_gene, levels = unique(INPUT$Human_gene))
+
+# Plot genes of interest distribution by condition
+p1 <- ggplot(INPUT %>% filter(sum > 9), aes(x = Human_gene, y = Condition_counts, fill = Condition)) +
+  geom_bar(color = "black", stat = "identity") +
+  #scale_fill_manual(values = c("Exposure" = "orange2", "Disease" = "lightblue")) +
+  scale_fill_manual(values = c("Exposure" = "#94221F", "Disease" = "#3E7274")) +
+  labs(x = "", y = "Number of conditions", fill = "Condition") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10))
+p1
+
+# Save plot
+# width = 14 for 750_plusLPS
+ggsave(p1, file = paste0("5_Figures/", date, "_750_plusLPS_ConditionDistributions_redblue.png"), width = 14, height = 4)
+```
+
+# Plot genes of interest where at least 1 disease is associated
+```{r}
+# Assign INPUT
+INPUT <- condition_distrib[[1]]
+GeneNum = "750_plusLPS"
+# Make Human_gene a factor with levels in the order of appearance
+INPUT$Human_gene <- factor(INPUT$Human_gene, levels = unique(INPUT$Human_gene))
+INPUT <- INPUT %>%
+  group_by(Human_gene) %>%
+  filter(sum > 9,
+         (any(Condition == "Disease" & Condition_counts > 0)))
+
+TGCs_10cond1dis <- INPUT %>%
+  filter(duplicated(Human_gene))
+
+# Plot genes of interest distribution by condition
+p1 <- ggplot(INPUT, aes(x = Human_gene, y = Condition_counts, fill = Condition)) +
+  geom_bar(color = "black", stat = "identity") +
+  #scale_fill_manual(values = c("Exposure" = "orange2", "Disease" = "lightblue")) +
+  scale_fill_manual(values = c("Exposure" = "#94221F", "Disease" = "#3E7274")) +
+  labs(x = "", y = "Number of conditions", fill = "Condition") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10))
+p1
+
+# Save plot
+# width = 14 for 750_plusLPS
+ggsave(p1, file = paste0("5_Figures/", date, "_750_plusLPS_ConditionDistributions_AtLeast1Dis_redblue.png"), width = 14, height = 4)
+```
+
+## Filter lists for genes of interest where at least 1 disease contributes
+```{r}
+# Write function
+filter_CM <- function(data){
+  data <- data %>%
+    group_by(Human_gene) %>%
+    filter(sum > 9,
+           Disease_sum > 0)
+  
+  return(data)
+}
+# Apply function
+countmatrices_10cond1dis <- lapply(countmatrices_master, filter_CM)
+
+# Remove non-250523 matrices
+countmatrices_10cond1dis <- countmatrices_10cond1dis[-c(1,2)]
+```
+
+## Identify which disease contributes the most to genes of interest
+```{r}
+# Write function
+disease_contributor <- function(data){
+  col_sums <- colSums(data[ , 2:19], na.rm = TRUE)
+  
+  return(col_sums)
+}
+# Apply function
+disease_contributions <- lapply(countmatrices_10cond1dis, disease_contributor)
+```
+
+# Identify which conditions (particularly diseases) contribute the most toward each signature
+```{r}
+# Assign INPUT. [1] = 1000, [2] = 500, [3] = 750
+INPUT <- data.frame(disease_contributions[3])
+colnames(INPUT) <- c("Gene_counts")
+INPUT <- INPUT %>%
+  rownames_to_column("Condition")
+INPUT$Condition_type <- NA
+INPUT$Condition_type[1:10] <- "Exposure"
+INPUT$Condition_type[11:18] <- "Disease"
+
+# Make Condition a factor with levels in the order of descending Gene_counts
+INPUT <- INPUT %>%
+  mutate(Condition = factor(Condition, levels = unique(Condition[order(-Gene_counts)])))
+
+# Plot genes of interest distribution by condition
+p1 <- ggplot(INPUT, aes(x = Condition, y = Gene_counts, fill = Condition_type)) +
+  geom_bar(color = "black", stat = "identity") +
+  #scale_fill_manual(values = c("Exposure" = "orange2", "Disease" = "lightblue")) +
+  scale_fill_manual(values = c("Exposure" = "#94221F", "Disease" = "#3E7274")) +
+  labs(x = "", y = "Genes of interest", fill = "Condition_type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10))
+p1
+
+# Save plot
+ggsave(p1, file = "5_Figures/250523_750_ConditionDistributions_AtLeast1Dis_TopContrib_redblue.png", width = 6, height = 4)
+```
+
+## Convert countmatrices_10cond1dis to condition-specific lists so they can be read into similarity coefficient functions below.
+```{r}
+# countmatrices_10cond1dis: [1] = 1000, [2] = 500, [3] = 750
+INPUT <- countmatrices_10cond1dis[2]
+filters <- "10Cond1Dis"
+
+# Clean
+list_name <- names(INPUT) #Save list name so you know what you're working with and can paste below
+names(INPUT) <- NULL #Remove list name so it's not appended to every column name when turned into df
+INPUT <- data.frame(INPUT) %>%
+  select(-c(sum, Exposure_sum, Disease_sum)) #Remove columns we don't need
+names(INPUT)[15] <- "COVID-19" #Rename COVID-19 column, it replaced dash with period
+
+# Get condition column names (excluding the Human_gene column)
+condition_cols <- setdiff(names(INPUT), "Human_gene")
+# Create list of dataframes, one per condition
+INPUT_lists <- lapply(condition_cols, function(cond) {
+  INPUT[INPUT[[cond]] == 1, "Human_gene", drop = FALSE]
+})
+# Name each list element with the condition name
+names(INPUT_lists) <- condition_cols
+```
+
+## Calculate similarity coefficients using our filtered genes of interest
+```{r}
+# Define the three similarity functions
+jaccard_similarity <- function(set1, set2) {
+  intersect_len <- length(intersect(set1, set2))
+  union_len <- length(union(set1, set2))
+  return(intersect_len / union_len)
+}
+
+dice_coefficient <- function(set1, set2) {
+  intersect_len <- length(intersect(set1, set2))
+  return(2 * intersect_len / (length(set1) + length(set2)))
+}
+
+overlap_coefficient <- function(set1, set2) {
+  intersect_len <- length(intersect(set1, set2))
+  return(intersect_len / min(length(set1), length(set2)))
+}
+
+# Extract sets of genes
+gene_sets <- lapply(INPUT_lists, function(df) unique(df$Human_gene))
+
+# Number of signatures
+n <- length(gene_sets)
+labels <- names(INPUT_lists)
+
+# Initialize matrices
+jaccard_matrix <- matrix(0, n, n, dimnames = list(labels, labels))
+dice_matrix <- matrix(0, n, n, dimnames = list(labels, labels))
+overlap_matrix <- matrix(0, n, n, dimnames = list(labels, labels))
+
+# Compute pairwise similarities
+for (i in seq_len(n)) {
+  for (j in seq_len(n)) {
+    set1 <- gene_sets[[i]]
+    set2 <- gene_sets[[j]]
+    
+    jaccard_matrix[i, j] <- jaccard_similarity(set1, set2)
+    dice_matrix[i, j] <- dice_coefficient(set1, set2)
+    overlap_matrix[i, j] <- overlap_coefficient(set1, set2)
+  }
+}
+
+# Convert to data frames 
+jaccard_df <- as.data.frame(jaccard_matrix) %>%
+  rownames_to_column("Condition")
+dice_df <- as.data.frame(dice_matrix) %>%
+  rownames_to_column("Condition")
+overlap_df <- as.data.frame(overlap_matrix) %>%
+  rownames_to_column("Condition")
+```
+
+## Create and save Excel of all data
+```{r}
+# Create Excel workbook
+OUT <- createWorkbook()
+# Add Excel sheets and write-out both filtered count matrix and similarity matrices
+addWorksheet(OUT, "count_matrix_filtered")
+writeData(OUT, sheet = "count_matrix_filtered", x = INPUT)
+addWorksheet(OUT, "jaccard_matrix")
+writeData(OUT, sheet = "jaccard_matrix", x = jaccard_df)
+addWorksheet(OUT, "overlap_matrix")
+writeData(OUT, sheet = "overlap_matrix", x = overlap_df)
+addWorksheet(OUT, "dice_matrix")
+writeData(OUT, sheet = "dice_matrix", x = dice_df)
+# Export file
+saveWorkbook(OUT, paste0("4_CountMatrix_Jaccard/", list_name, "_CountMatrix_MultiMeasures_", filters, ".xlsx"), overwrite = TRUE)
+```
+
+# GENERATE BALLOON PLOTS
+
+# JACCARD
+
+## First, scale jaccard_df within EXPOSURES
+```{r}
+# Create df to use as basis for bind_rows in for-loop
+Index_raw <- jaccard_df[c(1:10),c(1,12)]
+Index_raw$Disease <- colnames(Index_raw)[2]
+Index_raw <- Index_raw %>%
+  rename("Exposure" = "Condition",
+         "Index_raw" = "Asthma") %>%
+  relocate(Disease, .after = Exposure)
+
+# Define column names you want looped through (note that Asthma is gone because we defined it in the df above)
+dis_cols <- c("Bronchitis","COPD","COVID-19","ILD","Influenza","Pneumonia","Hypersensitivity")
+iteration = 12
+# Loop through signatures_expo to bind all exposures to main df
+for (i in dis_cols) {
+  iteration=iteration+1
+  input = Index_raw
+  
+  next_dis <- jaccard_df[c(1:10),c(1,iteration)]
+  next_dis$Disease <- colnames(next_dis)[2]
+  next_dis <- next_dis %>%
+    rename("Exposure" = "Condition",
+           "Index_raw" = paste0(i)) %>%
+    relocate(Disease, .after = Exposure)
+  
+  Index_raw <- full_join(input, next_dis)
+}
+
+# Create function to min-max scale within columns
+minmax <- function(x, na.rm = TRUE) {
+    return((x-min(x))/(max(x)-min(x)))
+}
+
+# Pivot input_data wider where Exposure conditions become column names
+Index_scale <- pivot_wider(Index_raw, names_from = Exposure, values_from = Index_raw)
+
+# Apply function across Exposure columns, pivot back to long, and join back to input_data
+Index_scale_minmax <- Index_scale %>%
+  mutate(across("Flaming_eucalyptus":"Smoldering_red_oak", minmax)) %>%
+  pivot_longer(!Disease, names_to = "Exposure", values_to = "Index_ExpSc")
+Index_input <- full_join(Index_raw, Index_scale_minmax)
+```
+
+## Create input dataframe for balloon plot
+```{r}
+# Assign numeric values to each of your groups to assign the position (x-y coordinates) they will appear on the balloon plot. 
+row_df <- data.frame(Disease = c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia"), row = c(8,7,6,5,4,3,2,1))
+col_df <- data.frame(Exposure = c("Flaming_eucalyptus", "Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak"), col = c(1,2,3,4,5,6,7,8,9,10))
+
+# Join row and col positions to the data frame 
+input_data <- Index_input %>%
+  left_join(row_df, by = "Disease") %>%
+  left_join(col_df, by = "Exposure")
+
+# Manually create axes labels (if you want the labels to be different - I think if you don't do this, it will just keep current names)
+# Note that these should be in numeric order for the positions on your axis (row position 1 should have its label in the first slot in the vector)
+vars_x_axis <- c("Euc_Fl", "Euc_Sm","Peat_Fl","Peat_Sm","Pine_Fl","Pine_Sm","PineNeedles_Fl","PineNeedles_Sm","RedOak_Fl","RedOak_Sm")
+vars_y_axis <- c("Pneumonia","Influenza","COVID-19","Bronchitis","ILD","Hypersensitivity","COPD","Asthma")
+```
+
+## Generate balloon plot
+Remember to change ggplot(size=) and geom_text(label=)
+```{r}
+balloonplot <- ggplot(input_data, aes(x=factor(col), y=factor(row), color=Exposure, size=Index_ExpSc)) +
+  scale_fill_brewer(palette="Dark2") +
+  geom_point() +    # plot as points
+  geom_text(aes(label=formatC(as.numeric(as.character(round(Index_ExpSc, 3))), digits = 3, format = "f"), x=col + 0.25), size=4) +   # display the value next to the "balloons"
+  scale_size(range = c(1, 5.5)) + # controls range of dot sizes
+  scale_x_discrete(breaks=1:length(vars_x_axis), labels=vars_x_axis, position='top') +   
+  scale_y_discrete(breaks=1:length(vars_y_axis), labels=vars_y_axis) +                 
+  theme_bw() +
+  theme(axis.line = element_blank(),            
+        axis.title = element_blank(),          
+        panel.border = element_blank(),         
+        panel.grid.major.x = element_blank(),   
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_blank())
+balloonplot
+```
+
+## Save balloon plot
+Note that the dimensions of the figure you write out will influence how close the rows and columns are to each other. These output dimensions worked well for me for my balloon plot with 4 columns and 5 rows.
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r}
+pdf(paste0("5_Figures/", list_name, "_BalloonPlot_Jaccard_ExpScaled_", filters, ".pdf"), height = 4, width = 13)
+balloonplot
+invisible(dev.off())
+```
+
+## Second, scale JSIs within DISEASES
+```{r}
+# Create function to min-max scale within columns
+minmax <- function(x, na.rm = TRUE) {
+    return((x-min(x))/(max(x)-min(x)))
+}
+
+# Pivot input_data wider where Disease conditions become column names
+Index_scale <- pivot_wider(Index_raw, names_from = Disease, values_from = Index_raw)
+
+# Apply function across Disease columns, pivot back to long, and join back to input_data
+Index_scale_minmax <- Index_scale %>%
+  mutate(across("Asthma":"Hypersensitivity", minmax)) %>% #Remember you made this minmax function above
+  pivot_longer(!Exposure, names_to = "Disease", values_to = "Index_DisSc")
+Index_input <- full_join(Index_input, Index_scale_minmax) %>%
+  mutate(Coefficient = "Jaccard")
+
+# Save as Jaccard-specific object
+Jaccard_input <- Index_input
+```
+
+## Create input dataframe for balloon plot
+```{r}
+# Assign numeric values to each of your groups to assign the position (x-y coordinates) they will appear on the balloon plot. 
+row_df <- data.frame(Exposure = c("Flaming_eucalyptus", "Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak"), row = c(10,9,8,7,6,5,4,3,2,1))
+col_df <- data.frame(Disease = c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia"), col = c(1,2,3,4,5,6,7,8))
+
+# Join row and col positions to the data frame 
+input_data <- Index_input %>%
+  left_join(row_df, by = "Exposure") %>%
+  left_join(col_df, by = "Disease")
+
+# Manually create axes labels (if you want the labels to be different - I think if you don't do this, it will just keep current names)
+# Note that these should be in numeric order for the positions on your axis (row position 1 should have its label in the first slot in the vector)
+vars_x_axis <- c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia")
+vars_y_axis <- c("RedOak_Sm","RedOak_Fl","PineNeedles_Sm","PineNeedles_Fl","Pine_Sm","Pine_Fl","Peat_Sm","Peat_Fl","Euc_Sm","Euc_Fl")
+```
+
+## Generate balloon plot
+Remember to change ggplot(size=) and geom_text(label=)
+```{r}
+balloonplot <- ggplot(input_data, aes(x=factor(col), y=factor(row), color=Disease, size=Index_DisSc)) +
+  scale_fill_brewer(palette="Dark2") +
+  geom_point() +    # plot as points
+  geom_text(aes(label=formatC(as.numeric(as.character(round(Index_DisSc, 3))), digits = 3, format = "f"), x=col + 0.25), size=4) +   # display the value next to the "balloons"
+  scale_size(range = c(1, 5.5)) + # controls range of dot sizes
+  scale_x_discrete(breaks=1:length(vars_x_axis), labels=vars_x_axis, position='top') +   
+  scale_y_discrete(breaks=1:length(vars_y_axis), labels=vars_y_axis) +                 
+  theme_bw() +
+  theme(axis.line = element_blank(),            
+        axis.title = element_blank(),          
+        panel.border = element_blank(),         
+        panel.grid.major.x = element_blank(),   
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_blank())
+balloonplot
+```
+
+# Save balloon plot
+Note that the dimensions of the figure you write out will influence how close the rows and columns are to each other. These output dimensions worked well for me for my balloon plot with 4 columns and 5 rows.
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r}
+pdf(paste0("5_Figures/", list_name, "_BalloonPlot_Jaccard_DisScaled_", filters, ".pdf"), height = 5, width = 11)
+balloonplot
+invisible(dev.off())
+```
+
+# OVERLAP
+
+## First, scale overlap_df within EXPOSURES
+```{r}
+# Create df to use as basis for bind_rows in for-loop
+Index_raw <- overlap_df[c(1:10),c(1,12)]
+Index_raw$Disease <- colnames(Index_raw)[2]
+Index_raw <- Index_raw %>%
+  rename("Exposure" = "Condition",
+         "Index_raw" = "Asthma") %>%
+  relocate(Disease, .after = Exposure)
+
+# Define column names you want looped through (note that Asthma is gone because we defined it in the df above)
+dis_cols <- c("Bronchitis","COPD","COVID-19","ILD","Influenza","Pneumonia","Hypersensitivity")
+iteration = 12
+# Loop through signatures_expo to bind all exposures to main df
+for (i in dis_cols) {
+  iteration=iteration+1
+  input = Index_raw
+  
+  next_dis <- overlap_df[c(1:10),c(1,iteration)]
+  next_dis$Disease <- colnames(next_dis)[2]
+  next_dis <- next_dis %>%
+    rename("Exposure" = "Condition",
+           "Index_raw" = paste0(i)) %>%
+    relocate(Disease, .after = Exposure)
+  
+  Index_raw <- full_join(input, next_dis)
+}
+
+# Create function to min-max scale within columns
+minmax <- function(x, na.rm = TRUE) {
+    return((x-min(x))/(max(x)-min(x)))
+}
+
+# Pivot input_data wider where Exposure conditions become column names
+Index_scale <- pivot_wider(Index_raw, names_from = Exposure, values_from = Index_raw)
+
+# Apply function across Exposure columns, pivot back to long, and join back to input_data
+Index_scale_minmax <- Index_scale %>%
+  mutate(across("Flaming_eucalyptus":"Smoldering_red_oak", minmax)) %>%
+  pivot_longer(!Disease, names_to = "Exposure", values_to = "Index_ExpSc") %>%
+  mutate(Coefficient = "Overlap")
+Index_input <- full_join(Index_raw, Index_scale_minmax)
+```
+
+## Create input dataframe for balloon plot
+```{r}
+# Assign numeric values to each of your groups to assign the position (x-y coordinates) they will appear on the balloon plot. 
+row_df <- data.frame(Disease = c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia"), row = c(8,7,6,5,4,3,2,1))
+col_df <- data.frame(Exposure = c("Flaming_eucalyptus", "Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak"), col = c(1,2,3,4,5,6,7,8,9,10))
+
+# Join row and col positions to the data frame 
+input_data <- Index_input %>%
+  left_join(row_df, by = "Disease") %>%
+  left_join(col_df, by = "Exposure")
+
+# Manually create axes labels (if you want the labels to be different - I think if you don't do this, it will just keep current names)
+# Note that these should be in numeric order for the positions on your axis (row position 1 should have its label in the first slot in the vector)
+vars_x_axis <- c("Euc_Fl", "Euc_Sm","Peat_Fl","Peat_Sm","Pine_Fl","Pine_Sm","PineNeedles_Fl","PineNeedles_Sm","RedOak_Fl","RedOak_Sm")
+vars_y_axis <- c("Pneumonia","Influenza","COVID-19","Bronchitis","ILD","Hypersensitivity","COPD","Asthma")
+```
+
+## Generate balloon plot
+Remember to change ggplot(size=) and geom_text(label=)
+```{r}
+balloonplot <- ggplot(input_data, aes(x=factor(col), y=factor(row), color=Exposure, size=Index_ExpSc)) +
+  scale_fill_brewer(palette="Dark2") +
+  geom_point() +    # plot as points
+  geom_text(aes(label=formatC(as.numeric(as.character(round(Index_ExpSc, 3))), digits = 3, format = "f"), x=col + 0.25), size=4) +   # display the value next to the "balloons"
+  scale_size(range = c(1, 5.5)) + # controls range of dot sizes
+  scale_x_discrete(breaks=1:length(vars_x_axis), labels=vars_x_axis, position='top') +   
+  scale_y_discrete(breaks=1:length(vars_y_axis), labels=vars_y_axis) +                 
+  theme_bw() +
+  theme(axis.line = element_blank(),            
+        axis.title = element_blank(),          
+        panel.border = element_blank(),         
+        panel.grid.major.x = element_blank(),   
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_blank())
+balloonplot
+```
+
+## Save balloon plot
+Note that the dimensions of the figure you write out will influence how close the rows and columns are to each other. These output dimensions worked well for me for my balloon plot with 4 columns and 5 rows.
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r}
+pdf(paste0("5_Figures/", list_name, "_BalloonPlot_Overlap_ExpScaled_", filters, ".pdf"), height = 4, width = 13)
+balloonplot
+invisible(dev.off())
+```
+
+## Second, scale overlap_matrix within DISEASES
+```{r}
+# Create function to min-max scale within columns
+minmax <- function(x, na.rm = TRUE) {
+    return((x-min(x))/(max(x)-min(x)))
+}
+
+# Pivot input_data wider where Disease conditions become column names
+Index_scale <- pivot_wider(Index_raw, names_from = Disease, values_from = Index_raw)
+
+# Apply function across Disease columns, pivot back to long, and join back to input_data
+Index_scale_minmax <- Index_scale %>%
+  mutate(across("Asthma":"Hypersensitivity", minmax)) %>% #Remember you made this minmax function above
+  pivot_longer(!Exposure, names_to = "Disease", values_to = "Index_DisSc") %>%
+  mutate(Coefficient = "Overlap")
+Index_input <- full_join(Index_input, Index_scale_minmax) 
+Index_input <- Index_input %>%
+  relocate(Coefficient, .after = Index_DisSc)
+
+# Save as Overlap-specific object
+Overlap_input <- Index_input
+```
+
+## Create input dataframe for balloon plot
+```{r}
+# Assign numeric values to each of your groups to assign the position (x-y coordinates) they will appear on the balloon plot. 
+row_df <- data.frame(Exposure = c("Flaming_eucalyptus", "Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak"), row = c(10,9,8,7,6,5,4,3,2,1))
+col_df <- data.frame(Disease = c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia"), col = c(1,2,3,4,5,6,7,8))
+
+# Join row and col positions to the data frame 
+input_data <- Index_input %>%
+  left_join(row_df, by = "Exposure") %>%
+  left_join(col_df, by = "Disease")
+
+# Manually create axes labels (if you want the labels to be different - I think if you don't do this, it will just keep current names)
+# Note that these should be in numeric order for the positions on your axis (row position 1 should have its label in the first slot in the vector)
+vars_x_axis <- c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia")
+vars_y_axis <- c("RedOak_Sm","RedOak_Fl","PineNeedles_Sm","PineNeedles_Fl","Pine_Sm","Pine_Fl","Peat_Sm","Peat_Fl","Euc_Sm","Euc_Fl")
+```
+
+## Generate balloon plot
+Remember to change ggplot(size=) and geom_text(label=)
+```{r}
+balloonplot <- ggplot(input_data, aes(x=factor(col), y=factor(row), color=Disease, size=Index_DisSc)) +
+  scale_fill_brewer(palette="Dark2") +
+  geom_point() +    # plot as points
+  geom_text(aes(label=formatC(as.numeric(as.character(round(Index_DisSc, 3))), digits = 3, format = "f"), x=col + 0.25), size=4) +   # display the value next to the "balloons"
+  scale_size(range = c(1, 5.5)) + # controls range of dot sizes
+  scale_x_discrete(breaks=1:length(vars_x_axis), labels=vars_x_axis, position='top') +   
+  scale_y_discrete(breaks=1:length(vars_y_axis), labels=vars_y_axis) +                 
+  theme_bw() +
+  theme(axis.line = element_blank(),            
+        axis.title = element_blank(),          
+        panel.border = element_blank(),         
+        panel.grid.major.x = element_blank(),   
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_blank())
+balloonplot
+```
+
+# Save balloon plot
+Note that the dimensions of the figure you write out will influence how close the rows and columns are to each other. These output dimensions worked well for me for my balloon plot with 4 columns and 5 rows.
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r}
+pdf(paste0("5_Figures/", list_name, "_BalloonPlot_Overlap_DisScaled_", filters, ".pdf"), height = 5, width = 11)
+balloonplot
+invisible(dev.off())
+```
+
+# DICE-SOERENSEN
+
+## First, scale dice_df within EXPOSURES
+```{r}
+# Create df to use as basis for bind_rows in for-loop
+Index_raw <- dice_df[c(1:10),c(1,12)]
+Index_raw$Disease <- colnames(Index_raw)[2]
+Index_raw <- Index_raw %>%
+  rename("Exposure" = "Condition",
+         "Index_raw" = "Asthma") %>%
+  relocate(Disease, .after = Exposure)
+
+# Define column names you want looped through (note that Asthma is gone because we defined it in the df above)
+dis_cols <- c("Bronchitis","COPD","COVID-19","ILD","Influenza","Pneumonia","Hypersensitivity")
+iteration = 12
+# Loop through signatures_expo to bind all exposures to main df
+for (i in dis_cols) {
+  iteration=iteration+1
+  input = Index_raw
+  
+  next_dis <- dice_df[c(1:10),c(1,iteration)]
+  next_dis$Disease <- colnames(next_dis)[2]
+  next_dis <- next_dis %>%
+    rename("Exposure" = "Condition",
+           "Index_raw" = paste0(i)) %>%
+    relocate(Disease, .after = Exposure)
+  
+  Index_raw <- full_join(input, next_dis)
+}
+
+# Create function to min-max scale within columns
+minmax <- function(x, na.rm = TRUE) {
+    return((x-min(x))/(max(x)-min(x)))
+}
+
+# Pivot input_data wider where Exposure conditions become column names
+Index_scale <- pivot_wider(Index_raw, names_from = Exposure, values_from = Index_raw)
+
+# Apply function across Exposure columns, pivot back to long, and join back to input_data
+Index_scale_minmax <- Index_scale %>%
+  mutate(across("Flaming_eucalyptus":"Smoldering_red_oak", minmax)) %>%
+  pivot_longer(!Disease, names_to = "Exposure", values_to = "Index_ExpSc")
+Index_input <- full_join(Index_raw, Index_scale_minmax)
+```
+
+## Create input dataframe for balloon plot
+```{r}
+# Assign numeric values to each of your groups to assign the position (x-y coordinates) they will appear on the balloon plot. 
+row_df <- data.frame(Disease = c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia"), row = c(8,7,6,5,4,3,2,1))
+col_df <- data.frame(Exposure = c("Flaming_eucalyptus", "Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak"), col = c(1,2,3,4,5,6,7,8,9,10))
+
+# Join row and col positions to the data frame 
+input_data <- Index_input %>%
+  left_join(row_df, by = "Disease") %>%
+  left_join(col_df, by = "Exposure")
+
+# Manually create axes labels (if you want the labels to be different - I think if you don't do this, it will just keep current names)
+# Note that these should be in numeric order for the positions on your axis (row position 1 should have its label in the first slot in the vector)
+vars_x_axis <- c("Euc_Fl", "Euc_Sm","Peat_Fl","Peat_Sm","Pine_Fl","Pine_Sm","PineNeedles_Fl","PineNeedles_Sm","RedOak_Fl","RedOak_Sm")
+vars_y_axis <- c("Pneumonia","Influenza","COVID-19","Bronchitis","ILD","Hypersensitivity","COPD","Asthma")
+```
+
+## Generate balloon plot
+Remember to change ggplot(size=) and geom_text(label=)
+```{r}
+balloonplot <- ggplot(input_data, aes(x=factor(col), y=factor(row), color=Exposure, size=Index_ExpSc)) +
+  scale_fill_brewer(palette="Dark2") +
+  geom_point() +    # plot as points
+  geom_text(aes(label=formatC(as.numeric(as.character(round(Index_ExpSc, 3))), digits = 3, format = "f"), x=col + 0.25), size=4) +   # display the value next to the "balloons"
+  scale_size(range = c(1, 5.5)) + # controls range of dot sizes
+  scale_x_discrete(breaks=1:length(vars_x_axis), labels=vars_x_axis, position='top') +   
+  scale_y_discrete(breaks=1:length(vars_y_axis), labels=vars_y_axis) +                 
+  theme_bw() +
+  theme(axis.line = element_blank(),            
+        axis.title = element_blank(),          
+        panel.border = element_blank(),         
+        panel.grid.major.x = element_blank(),   
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_blank())
+balloonplot
+```
+
+## Save balloon plot
+Note that the dimensions of the figure you write out will influence how close the rows and columns are to each other. These output dimensions worked well for me for my balloon plot with 4 columns and 5 rows.
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r}
+pdf(paste0("5_Figures/", list_name, "_BalloonPlot_Dice_ExpScaled_", filters, ".pdf"), height = 4, width = 13)
+balloonplot
+invisible(dev.off())
+```
+
+## Second, scale overlap_matrix within DISEASES
+```{r}
+# Create function to min-max scale within columns
+minmax <- function(x, na.rm = TRUE) {
+    return((x-min(x))/(max(x)-min(x)))
+}
+
+# Pivot input_data wider where Disease conditions become column names
+Index_scale <- pivot_wider(Index_raw, names_from = Disease, values_from = Index_raw)
+
+# Apply function across Disease columns, pivot back to long, and join back to input_data
+Index_scale_minmax <- Index_scale %>%
+  mutate(across("Asthma":"Hypersensitivity", minmax)) %>% #Remember you made this minmax function above
+  pivot_longer(!Exposure, names_to = "Disease", values_to = "Index_DisSc") %>%
+  mutate(Coefficient = "Dice")
+Index_input <- full_join(Index_input, Index_scale_minmax) 
+Index_input <- Index_input %>%
+  relocate(Coefficient, .after = Index_DisSc)
+
+# Save as Dice-specific object
+Dice_input <- Index_input
+```
+
+## Create input dataframe for balloon plot
+```{r}
+# Assign numeric values to each of your groups to assign the position (x-y coordinates) they will appear on the balloon plot. 
+row_df <- data.frame(Exposure = c("Flaming_eucalyptus", "Smoldering_eucalyptus","Flaming_peat","Smoldering_peat","Flaming_pine","Smoldering_pine","Flaming_pine_needles","Smoldering_pine_needles","Flaming_red_oak","Smoldering_red_oak"), row = c(10,9,8,7,6,5,4,3,2,1))
+col_df <- data.frame(Disease = c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia"), col = c(1,2,3,4,5,6,7,8))
+
+# Join row and col positions to the data frame 
+input_data <- Index_input %>%
+  left_join(row_df, by = "Exposure") %>%
+  left_join(col_df, by = "Disease")
+
+# Manually create axes labels (if you want the labels to be different - I think if you don't do this, it will just keep current names)
+# Note that these should be in numeric order for the positions on your axis (row position 1 should have its label in the first slot in the vector)
+vars_x_axis <- c("Asthma","COPD","Hypersensitivity","ILD","Bronchitis","COVID-19","Influenza","Pneumonia")
+vars_y_axis <- c("RedOak_Sm","RedOak_Fl","PineNeedles_Sm","PineNeedles_Fl","Pine_Sm","Pine_Fl","Peat_Sm","Peat_Fl","Euc_Sm","Euc_Fl")
+```
+
+## Generate balloon plot
+Remember to change ggplot(size=) and geom_text(label=)
+```{r}
+balloonplot <- ggplot(input_data, aes(x=factor(col), y=factor(row), color=Disease, size=Index_DisSc)) +
+  scale_fill_brewer(palette="Dark2") +
+  geom_point() +    # plot as points
+  geom_text(aes(label=formatC(as.numeric(as.character(round(Index_DisSc, 3))), digits = 3, format = "f"), x=col + 0.25), size=4) +   # display the value next to the "balloons"
+  scale_size(range = c(1, 5.5)) + # controls range of dot sizes
+  scale_x_discrete(breaks=1:length(vars_x_axis), labels=vars_x_axis, position='top') +   
+  scale_y_discrete(breaks=1:length(vars_y_axis), labels=vars_y_axis) +                 
+  theme_bw() +
+  theme(axis.line = element_blank(),            
+        axis.title = element_blank(),          
+        panel.border = element_blank(),         
+        panel.grid.major.x = element_blank(),   
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(size = 10, color = "black"),
+        axis.ticks = element_blank())
+balloonplot
+```
+
+# Save balloon plot
+Note that the dimensions of the figure you write out will influence how close the rows and columns are to each other. These output dimensions worked well for me for my balloon plot with 4 columns and 5 rows.
+NOTE: Export this PDF to TIFF and upload to BioRender for post-processing.
+```{r}
+pdf(paste0("5_Figures/", list_name, "_BalloonPlot_Dice_DisScaled_", filters, ".pdf"), height = 5, width = 11)
+balloonplot
+invisible(dev.off())
+```
+
+# Make master coefficient index df and save
+```{r}
+# Make master df
+Index_input <- Jaccard_input
+Index_input <- bind_rows(Index_input, Overlap_input)
+Index_input <- bind_rows(Index_input, Dice_input)
+
+# Save onto file generated above
+addWorksheet(OUT, "input_values")
+writeData(OUT, sheet = "input_values", x = Index_input, rowNames = FALSE)
+saveWorkbook(OUT, paste0("4_CountMatrix_Jaccard/", list_name, "_CountMatrix_MultiMeasures_", filters, ".xlsx"), overwrite = TRUE)
+```
+
+# ClusterProfiler
+See pathfindR vignette here: https://cran.r-project.org/web/packages/pathfindR/vignettes/intro_vignette.html
+See clusterProfiler vignette here (VERY IMPORTANT): https://yulab-smu.top/biomedical-knowledge-mining-book/index.html
+See clusterProfiler manuscript here: https://www.nature.com/articles/s41596-024-01020-z
+Example input data for clusterProfiler here: https://yulab-smu.top/clusterProfiler_protocol/
+```{r}
+# Clean NCBI human gene symbol codebook by removing columns we don't need and renaming those we do
+ncbi_genes <- read.csv("ncbi_human.tsv", sep = '\t')
+ncbi_genes <- ncbi_genes[,1:2]
+colnames(ncbi_genes) <- c("entrez", "Human_gene")
+
+# Convert Human_gene to NCBI EntrezID and convert to character vector needed for input
+Entrez <- TGCs_10cond1dis %>%
+  dplyr::select(Human_gene) #Remove extra columns we don't need
+Entrez <- left_join(Entrez, ncbi_genes, by = join_by(Human_gene)) #left_join() to only keep TGCs
+Entrez <- Entrez[,2] #Remove all columns besides the EntrezIDs
+CP_input <- as.character(Entrez$entrez) #Convert to character vector format needed as input
+
+#Load packages we need for Reactome Over-Representation Analysis (ORA) and visualizations
+library(ReactomePA)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(ggplot2)
+
+# Run Reactome ORA using enrichPathway(), which is Reactome-specific
+Reactome_ORA_results <- enrichPathway(gene=CP_input, pvalueCutoff = 0.05, readable=TRUE)
+
+# Convert Reactome_ORA_results to data frame so we can save below
+res1 <- as.data.frame(Reactome_ORA_results)
+
+# Visualize using traditional bar and dot plots
+pBar <- barplot(Reactome_ORA_results, showCategory=20)
+pBar2 <- barplot(Reactome_ORA_results, showCategory=10)
+pBarQscore <- mutate(Reactome_ORA_results, qscore = -log(p.adjust, base=10)) %>% 
+    barplot(x="qscore")
+pDot <- dotplot(Reactome_ORA_results, showCategory=10) +
+  scale_color_gradient(
+    low = "red",      # low p.adjust values (significant) → red
+    high = "blue",    # high p.adjust values (non-sig) → blue
+    trans = "reverse" # flips the legend so red is at the top
+  ) +
+  labs(color = "Adjusted p-value")
+pDot
+pDot2 <- dotplot(Reactome_ORA_results, showCategory=20)
+
+# Convert EntrezIDs back to gene symbols for the CNet figures, and visualize using more complicated plots
+Reactome_ORA_results_symbols <- setReadable(Reactome_ORA_results, 'org.Hs.eg.db', 'ENTREZID')
+# CNet
+pCNet <- cnetplot(Reactome_ORA_results_symbols)
+# Heatmap
+pHeat <- heatplot(Reactome_ORA_results_symbols, showCategory=5)
+pHeat2 <- heatplot(Reactome_ORA_results_symbols, showCategory=10)
+# Tree plot
+Reactome_ORA_results_symbols2 <- pairwise_termsim(Reactome_ORA_results_symbols) #Calculate pair-wise similarities
+pTree <- treeplot(Reactome_ORA_results_symbols2, hclust_method = "average")
+pTree
+
+# Enrichment map organizes enriched terms into a network with edges connecting overlapping gene sets. In this way, mutually overlapping gene sets are tend to cluster together, making it easy to identify functional module.
+pEnrich <- emapplot(Reactome_ORA_results_symbols2)
+pEnrich
+```
+
+# Clean Reactome_ORA_results dataframe so GeneRatio doesn't output as dates in csv
+```{r}
+res1 <- res1 %>%
+  separate(GeneRatio,
+           into = c("GeneRatio_num", "GeneRatio_denom"),
+           sep = "/",
+           convert = TRUE) %>%   # converts to numeric instead of character
+  separate(BgRatio,
+           into = c("BgRatio_num", "BgRatio_denom"),
+           sep = "/",
+           convert = TRUE) %>%   # converts to numeric instead of character
+  mutate(GeneRatio = GeneRatio_num / GeneRatio_denom,
+         BgRatio = BgRatio_num / BgRatio_denom) %>%
+  relocate(GeneRatio, .before = GeneRatio_num) %>%
+  relocate(BgRatio, .before = BgRatio_num)
+```
+
+# Save Reactome_ORA_results and plots
+```{r}
+write_csv(res1, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_RESULTS.csv"))
+
+ggsave(pBar, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Bar20.png"), width = 6, height = 12)
+ggsave(pBar2, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Bar10.png"), width = 6, height = 6)
+ggsave(pBarQscore, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_BarQscore.png"), width = 6, height = 6)
+ggsave(pDot, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Dot10.png"), width = 6, height = 6)
+ggsave(pDot2, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Dot20.png"), width = 6, height = 12)
+ggsave(pCNet, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_CNet.png"), width = 6, height = 4)
+ggsave(pHeat, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Heat5.png"), width = 6, height = 3)
+ggsave(pHeat2, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Heat10.png"), width = 8, height = 4)
+ggsave(pTree, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_Tree.png"), width = 15, height = 8)
+ggsave(pEnrich, file = paste0("9_ClusterProfiler/", date, "_750_ClusterProfilerReactome_EnrichMap.png"), width = 12, height = 8)
+```
