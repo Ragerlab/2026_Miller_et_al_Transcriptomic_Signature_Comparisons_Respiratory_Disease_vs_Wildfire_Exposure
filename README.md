@@ -7,13 +7,13 @@ Code associated with 'Transcriptomic signature comparisons identify conserved ke
 3) C_WildfireSim_MCA_v5.Rmd -- This code uses Multiple Correspondence Analysis (MCA) and other dimension reduction methods to analyze the aggregate exposure and disease signatures in addition to the subset of top shared genes identified as highly shared across both exposure and disease.
 4) C_WildfireSim_PostAnalysisNeeds_MultipleMetrics_v2.Rmd -- This code 
 
-# Sensitivity analyses
-# Alternative signature sizes workflow
+# Sensitivity analyses:
+## Alternative signature sizes workflow
 1) A_WildfireSim_DataCleaning.Rmd -- See above.
 2) B_WildfireSim_CountMatrix_MultipleMetrics_v2.Rmd -- See above.
 3) CSupp_WildfireSim_PostAnalysisNeeds_MultipleMetrics_v2_SuppSigSizes.Rmd -- Same description as C_WildfireSim_PostAnalysisNeeds_MultipleMetrics_v2.Rmd above, but code has been modified to more easily read-out figures and files with prefixes that designate what signature size was used.
 
-# LPS as a positive inflammatory control workflow
-1) ASupp_WildfireSim_DataCleaning_addLPS.Rmd -- 
+## LPS as a positive inflammatory control workflow
+1) ASupp_WildfireSim_DataCleaning_addLPS.Rmd -- Same description as A_WildfireSim_DataCleaning.Rmd above, but code has been modified to accomodate the inclusion of LPS as an additional exposure signature.
 2) BSupp_WildfireSim_CountMatrix_MultipleMetrics_v2_addLPS.Rmd -- Same description as B_WildfireSim_CountMatrix_MultipleMetrics_v2.Rmd above, but code has been modified to accomodate the inclusion of LPS as an additional exposure signature.
 3) CSupp_WildfireSim_PostAnalysisNeeds_MultipleMetrics_v2_addLPS.Rmd -- Same description as C_WildfireSim_PostAnalysisNeeds_MultipleMetrics_v2.Rmd above, but code has been modified to accomodate the inclusion of LPS as an additional exposure signature.
